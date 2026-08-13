@@ -18,12 +18,6 @@ export interface PoolBelowMinimumError {
   minCharacters: number;
 }
 
-export interface PoolBelowMaximumError {
-  type: 'PoolBelowMaximum';
-  poolSize: number;
-  maxCharacters: number;
-}
-
 export interface NoEligibleCharactersError {
   type: 'NoEligibleCharacters';
   caseTemplateId: string;
@@ -62,7 +56,6 @@ export interface DuplicateCharacterError {
 export type CharacterSelectionError =
   | RequiredExceedsMaxError
   | PoolBelowMinimumError
-  | PoolBelowMaximumError
   | NoEligibleCharactersError
   | InsufficientPoolError
   | InvalidWeightError

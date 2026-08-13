@@ -57,13 +57,16 @@ describe('property invariants', () => {
     const requiredCount = requiredIds.length;
     const optionalPositive = input.characters.filter((c) => !c.required && c.weight > 0).length;
     const lower = Math.max(input.minCharacters, requiredCount);
-    const upper = input.maxCharacters > 0 ? input.maxCharacters : input.characters.length;
+    const effectiveUpper =
+      input.maxCharacters > 0
+        ? Math.min(input.maxCharacters, input.characters.length)
+        : input.characters.length;
     const fillable = requiredCount + optionalPositive;
-    const poolOk =
+    const guaranteedOk =
       input.characters.length >= input.minCharacters &&
-      (input.maxCharacters === 0 || input.characters.length >= input.maxCharacters) &&
-      (input.maxCharacters === 0 || requiredCount <= input.maxCharacters);
-    const guaranteedOk = lower <= upper && poolOk && fillable >= upper;
+      (input.maxCharacters === 0 || requiredCount <= input.maxCharacters) &&
+      lower <= effectiveUpper &&
+      fillable >= effectiveUpper;
 
     if (!guaranteedOk) continue;
 
@@ -77,9 +80,7 @@ describe('property invariants', () => {
         const ids = result.characters.map((c) => c.characterId);
 
         expect(result.characters.length).toBeGreaterThanOrEqual(input.minCharacters);
-        if (input.maxCharacters > 0) {
-          expect(result.characters.length).toBeLessThanOrEqual(input.maxCharacters);
-        }
+        expect(result.characters.length).toBeLessThanOrEqual(effectiveUpper);
         expect(result.characters.length).toBeLessThanOrEqual(input.characters.length);
         for (const id of requiredIds) {
           expect(ids).toContain(id);

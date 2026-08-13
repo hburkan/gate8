@@ -159,6 +159,32 @@ describe('selectCharacters — required semantics', () => {
 });
 
 describe('selectCharacters — pool size validation', () => {
+  it('caps the effective upper bound at the pool size', () => {
+    const input = makeInput({ minCharacters: 2, maxCharacters: 5 }, [
+      char('a'),
+      char('b'),
+      char('c'),
+    ]);
+    for (let s = 0; s < 100; s++) {
+      const result = selectCharacters({ ...input, seed: `c${s}` });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.characters.length).toBeGreaterThanOrEqual(2);
+        expect(result.characters.length).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+
+  it('target never exceeds the eligible pool', () => {
+    const pool = [char('a'), char('b'), char('c')];
+    const input = makeInput({ minCharacters: 1, maxCharacters: 0 }, pool);
+    for (let s = 0; s < 300; s++) {
+      const result = selectCharacters({ ...input, seed: `e${s}` });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.characters.length).toBeLessThanOrEqual(pool.length);
+    }
+  });
+
   it('returns PoolBelowMinimum when pool < min_characters', () => {
     const result = selectCharacters(
       makeInput({ minCharacters: 5, maxCharacters: 0 }, [char('a'), char('b'), char('c')]),
@@ -167,12 +193,20 @@ describe('selectCharacters — pool size validation', () => {
     if (!result.ok) expect(result.error.type).toBe('PoolBelowMinimum');
   });
 
-  it('returns PoolBelowMaximum when pool < max_characters but >= min_characters', () => {
-    const result = selectCharacters(
-      makeInput({ minCharacters: 1, maxCharacters: 4 }, [char('a'), char('b'), char('c')]),
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.type).toBe('PoolBelowMaximum');
+  it('succeeds when pool < max_characters but >= min_characters (upper bound is capped by pool)', () => {
+    const input = makeInput({ minCharacters: 1, maxCharacters: 4 }, [
+      char('a'),
+      char('b'),
+      char('c'),
+    ]);
+    for (let s = 0; s < 100; s++) {
+      const result = selectCharacters({ ...input, seed: `m${s}` });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.characters.length).toBeGreaterThanOrEqual(1);
+        expect(result.characters.length).toBeLessThanOrEqual(3);
+      }
+    }
   });
 });
 
@@ -406,11 +440,6 @@ describe('selectCharacters — deterministic typed failures', () => {
       name: 'PoolBelowMinimum',
       input: makeInput({ minCharacters: 5, maxCharacters: 0 }, [char('a'), char('b')]),
       type: 'PoolBelowMinimum',
-    },
-    {
-      name: 'PoolBelowMaximum',
-      input: makeInput({ minCharacters: 1, maxCharacters: 5 }, [char('a'), char('b')]),
-      type: 'PoolBelowMaximum',
     },
     { name: 'NoEligibleCharacters', input: makeInput({}, []), type: 'NoEligibleCharacters' },
     {

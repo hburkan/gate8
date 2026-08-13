@@ -1,6 +1,6 @@
 # Phase 6 — Character Generation Design
 
-> **Status:** DESIGN — for review. No database, migration, shared-types, content-schema, game-rules, Admin UI, or Mobile UI changes are made in this phase. This document only designs the character-selection system and proposes the module/API boundary. Implementation follows approval.
+> **Status:** DESIGN — approved; implemented in `@gate8/game-rules` (commit `ddf630d`). This document specifies the character-selection system and the module/API boundary. `max_characters` semantics: capped by pool size — see §2.1.1. No database, migration, shared-types, content-schema, Admin UI, or Mobile UI changes in this phase.
 
 **Goal:** Design how a Case Template deterministically generates its actual Character set from the existing canonical relation `case_characters`, using the existing `cases.min_characters`/`max_characters` bounds — without creating pool tables, duplicate relations, case instances, a generator implementation, or any database change.
 
@@ -60,14 +60,16 @@ Definitions used throughout:
 
 `min_characters = 2, max_characters = 4` means: **generate a random target count drawn uniformly from the inclusive interval `[lower, upper]`**, then select that many characters from the eligible pool.
 
+`min_characters` and `max_characters` are the **minimum and maximum number that may be generated** — they are **not** pool-size requirements. A pool smaller than `max_characters` is valid: the effective upper bound is capped by the eligible pool.
+
 - `lower = max(min_characters, |R|)` — you can never select fewer than the required count.
-- `upper = max_characters > 0 ? max_characters : |E|` — `0` means "no upper bound" (Phase 5 convention), resolved to the pool size.
+- `upper = max_characters > 0 ? min(max_characters, |E|) : |E|` — `0` means "no upper bound" (Phase 5 convention), resolved to the pool size; a positive `max_characters` is capped by the eligible pool size.
 - `target = lower + prng.int(0, upper - lower)` — one seeded draw from a uniform integer distribution.
 
 **Precise algorithm:**
 
 1. **Snapshot & validate** — the caller passes a version-pinned snapshot (§9). Validate: template present; all relation rows carry `version == template.version`; no duplicate `character_id`; every `weight >= 0`; `min_characters >= 0`, `max_characters >= 0`. Any violation ⇒ deterministic error (§10).
-2. **Compute bounds** — `R`, `O`, `lower`, `upper` as above. If `lower > upper` ⇒ error (§10, cases: `required > max`, `pool < min`, `pool < max`).
+2. **Compute bounds** — `R`, `O`, `lower`, `upper` as above. If `lower > upper` ⇒ error (§10, cases: `required > max`, `pool < min`).
 3. **Draw target count** — `target = lower + prng.int(upper - lower + 1)` (uniform, inclusive).
 4. **Select required** — every member of `R` is selected unconditionally.
 5. **Select optional to fill** — while `|selected| < target`:
@@ -78,6 +80,27 @@ Definitions used throughout:
 7. **Return** — `{ characters: [{ characterId, role }], seed, templateVersion, caseTemplateId }`.
 
 **Seed participation:** the PRNG stream is consumed in a fixed order — draw 1 for the target count, then one draw per optional pick. The same seed reproduces the same count and the same picks. (§6.3, §11.)
+
+### 2.1.1 Effective upper bound is capped by the pool
+
+Because `max_characters` caps the _generated count_ (not the _pool size_), the effective upper bound used for the target draw is:
+
+```
+effectiveUpper = max_characters > 0 ? min(max_characters, |E|) : |E|
+```
+
+| Pool | min | max | effective range | Note                                                       |
+| ---- | --- | --- | --------------- | ---------------------------------------------------------- |
+| 10   | 2   | 5   | 2..5            | pool is not the limit                                      |
+| 3    | 2   | 5   | 2..3            | capped by pool                                             |
+| 2    | 2   | 5   | exactly 2       | capped by pool                                             |
+| 1    | 2   | 5   | error           | `PoolBelowMinimum`                                         |
+| 3    | 4   | 5   | error           | `PoolBelowMinimum`                                         |
+| 3    | 1   | 5   | 1..3            | pool < max is valid                                        |
+| 2    | 0   | 0   | 0..2            | `0` = no upper bound                                       |
+| 3    | 2   | 2   | exactly 2       | required=3 → `RequiredExceedsMax` only when required > max |
+
+There is **no `PoolBelowMaximum` failure**: a pool smaller than `max_characters` simply narrows the generated range. `PoolBelowMinimum` (pool < min) and `RequiredExceedsMax` (required > max) remain failures.
 
 ### 2.2 Concrete example (spec)
 
@@ -221,7 +244,6 @@ This meaning was chosen because it is the only non-conflicting reading consisten
 | ----------------------------------------------- | ---------------------- | -------------------------------------------------- |
 | `required > max_characters`                     | `RequiredExceedsMax`   | publish validation (Phase 26) + generator backstop |
 | `pool size < min_characters`                    | `PoolBelowMinimum`     | publish validation + generator backstop            |
-| `pool size < max_characters`                    | `PoolBelowMaximum`     | publish validation + generator backstop            |
 | no eligible characters (`                       | E                      | = 0`)                                              | `NoEligibleCharacters` | generator |
 | all optional `weight = 0` + target >            | R                      |                                                    | `InsufficientPool`     | generator |
 | negative weight in snapshot                     | `InvalidWeight`        | generator (defensive; DB CHECK already prevents)   |
@@ -292,15 +314,15 @@ Deterministic unit tests (in `packages/game-rules`, Phase 6 implementation):
 | ------------------------------- | ------------------------------------------------------------------------------------ |
 | same seed ⇒ same result         | two calls, same input, equal output                                                  |
 | different seeds ⇒ can differ    | property run across seeds; at least one differing selection (may be count or picks)  |
-| min boundary                    | target never < `max(min,                                                             | R   | )`  |
-| max boundary                    | selected count never > `max_characters`                                              |
+| min boundary                    | target never < `max(min,                                                             | R   | )`               |
+| max boundary                    | selected count never > `effectiveUpper` (= `min(max_characters,                      | E   | )` when bounded) |
 | required always present         | for every seed, every required id is in output                                       |
 | no duplicates                   | selected ids unique                                                                  |
 | weighted selection distribution | statistical check with many seeds: high-weight row chosen more often than low-weight |
 | zero-weight not selectable      | weight-0 optional never picked (unless required)                                     |
 | required > max                  | returns `RequiredExceedsMax`                                                         |
 | pool < min                      | returns `PoolBelowMinimum`                                                           |
-| all optional weights zero       | returns `InsufficientPool` (when target >                                            | R   | )   |
+| all optional weights zero       | returns `InsufficientPool` (when target >                                            | R   | )                |
 | version mismatch                | returns `VersionMismatch`                                                            |
 | negative weight                 | returns `InvalidWeight`                                                              |
 

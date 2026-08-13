@@ -25,6 +25,11 @@ export type {
  * Draw sequence (part of the generator contract): draw #1 = target count,
  * then one weighted draw per optional pick, in canonical `(priority,
  * character_id)` order.
+ *
+ * Bounds semantics: `min_characters`/`max_characters` are the minimum and
+ * maximum number that may be generated, not pool-size requirements. The
+ * effective upper bound is capped by the eligible pool size:
+ * `upper = max_characters > 0 ? min(max_characters, |E|) : |E|`.
  */
 export function selectCharacters(input: CharacterSelectionInput): CharacterSelectionResult {
   const failure = validate(input);
@@ -48,7 +53,8 @@ export function selectCharacters(input: CharacterSelectionInput): CharacterSelec
   }
 
   const lower = Math.max(input.minCharacters, required.length);
-  const upper = input.maxCharacters > 0 ? input.maxCharacters : eligible.length;
+  const upper =
+    input.maxCharacters > 0 ? Math.min(input.maxCharacters, eligible.length) : eligible.length;
 
   if (eligible.length < input.minCharacters) {
     return {
@@ -60,32 +66,12 @@ export function selectCharacters(input: CharacterSelectionInput): CharacterSelec
       },
     };
   }
-  if (input.maxCharacters > 0 && eligible.length < input.maxCharacters) {
-    return {
-      ok: false,
-      error: {
-        type: 'PoolBelowMaximum',
-        poolSize: eligible.length,
-        maxCharacters: input.maxCharacters,
-      },
-    };
-  }
   if (input.maxCharacters > 0 && required.length > input.maxCharacters) {
     return {
       ok: false,
       error: {
         type: 'RequiredExceedsMax',
         requiredCount: required.length,
-        maxCharacters: input.maxCharacters,
-      },
-    };
-  }
-  if (lower > upper) {
-    return {
-      ok: false,
-      error: {
-        type: 'InvalidBounds',
-        minCharacters: input.minCharacters,
         maxCharacters: input.maxCharacters,
       },
     };
