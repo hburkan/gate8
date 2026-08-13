@@ -6,3 +6,6 @@ export * from './quantity.js';
 export * from './item-errors.js';
 export * from './item-types.js';
 export * from './item-selection.js';
+export * from './document-errors.js';
+export * from './document-types.js';
+export * from './document-selection.js';

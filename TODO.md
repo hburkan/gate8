@@ -399,6 +399,18 @@ Cases can override or restrict item pools.
 
 # PHASE 9 — DOCUMENT GENERATION
 
+> **Note (approved Phase 9 implementation):** The approved Phase 9 document-generation
+> work implements **GLOBAL CASE DOCUMENT GENERATION** — the deterministic generation
+> of a Case Template's complete document set from the canonical `case_documents`
+> relation and `cases.min_documents`/`max_documents`, implemented in
+> `packages/game-rules` (`selectDocuments`). `case_documents` remains the canonical
+> relation/pool; **no `case_document_pool` table is required**. Documents are
+> single-instance (no quantities). `role`/`hidden`/`discovery_method` are passive
+> instance state carried through unchanged (`role` free text, `real`/`fake`/`decoy`
+> in the TS layer). Per-character and per-location document assignment/pools
+> (`character_document_pool`, `location_document_pool`) remain **deferred** to later
+> phases; `location_documents` is a separate relation and is untouched.
+
 Documents must support:
 
 - [ ] Case-specific documents.
