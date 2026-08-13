@@ -136,6 +136,18 @@ export const locationCaseSchema = relationBaseSchema.extend({
   conditions: relationConditionsSchema,
 });
 
+export const chapterLocationSchema = relationBaseSchema.extend({
+  chapterId: z.string().uuid(),
+  locationId: z.string().uuid(),
+  sortOrder: z.number().int().nonnegative(),
+});
+
+export const chapterCaseSchema = relationBaseSchema.extend({
+  chapterId: z.string().uuid(),
+  caseId: z.string().uuid(),
+  sortOrder: z.number().int().nonnegative(),
+});
+
 export type CaseCharacter = z.infer<typeof caseCharacterSchema>;
 export type CaseItem = z.infer<typeof caseItemSchema>;
 export type CaseDocument = z.infer<typeof caseDocumentSchema>;
@@ -145,3 +157,5 @@ export type LocationItem = z.infer<typeof locationItemSchema>;
 export type LocationDocument = z.infer<typeof locationDocumentSchema>;
 export type LocationEvidence = z.infer<typeof locationEvidenceSchema>;
 export type LocationCase = z.infer<typeof locationCaseSchema>;
+export type ChapterLocation = z.infer<typeof chapterLocationSchema>;
+export type ChapterCase = z.infer<typeof chapterCaseSchema>;

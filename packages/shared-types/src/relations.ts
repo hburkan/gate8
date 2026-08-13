@@ -142,3 +142,19 @@ export interface LocationCase extends RelationBase {
   sortOrder: number;
   conditions: unknown[];
 }
+
+// ---------------------------------------------------------------------------
+// Chapter relations
+// ---------------------------------------------------------------------------
+
+export interface ChapterLocation extends RelationBase {
+  chapterId: string;
+  locationId: string;
+  sortOrder: number;
+}
+
+export interface ChapterCase extends RelationBase {
+  chapterId: string;
+  caseId: string;
+  sortOrder: number;
+}

@@ -7,6 +7,7 @@ import {
   locationSchema,
   missionSchema,
   caseSchema,
+  chapterSchema,
   caseCharacterSchema,
   caseItemSchema,
   caseDocumentSchema,
@@ -16,6 +17,8 @@ import {
   locationDocumentSchema,
   locationEvidenceSchema,
   locationCaseSchema,
+  chapterLocationSchema,
+  chapterCaseSchema,
   dialogueNodeChoiceSchema,
   dialogueNodeSchema,
 } from '../src/index.js';
@@ -334,5 +337,45 @@ describe('content entity schemas', () => {
         conditions: [],
       }),
     ).toThrow();
+  });
+
+  it('parses a valid chapter', () => {
+    const c = chapterSchema.parse({
+      ...base,
+      title: 'Chapter 1',
+      description: null,
+      sortOrder: 1,
+    });
+    expect(c.title).toBe('Chapter 1');
+    expect(c.sortOrder).toBe(1);
+  });
+
+  it('rejects a chapter without a title', () => {
+    expect(() =>
+      chapterSchema.parse({ ...base, title: '', description: null, sortOrder: 0 }),
+    ).toThrow();
+  });
+
+  it('rejects a chapter with negative sort order', () => {
+    expect(() =>
+      chapterSchema.parse({ ...base, title: 'Chapter 1', description: null, sortOrder: -1 }),
+    ).toThrow();
+  });
+
+  it('parses valid chapter location and case relations', () => {
+    const cl = chapterLocationSchema.parse({
+      ...relationBase,
+      chapterId: base.id,
+      locationId: base.id,
+      sortOrder: 1,
+    });
+    const cc = chapterCaseSchema.parse({
+      ...relationBase,
+      chapterId: base.id,
+      caseId: base.id,
+      sortOrder: 2,
+    });
+    expect(cl.locationId).toBe(base.id);
+    expect(cc.sortOrder).toBe(2);
   });
 });

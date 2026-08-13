@@ -6,5 +6,6 @@ export * from './entities/document.js';
 export * from './entities/evidence.js';
 export * from './entities/location.js';
 export * from './entities/case.js';
+export * from './entities/chapter.js';
 export * from './entities/dialogue.js';
 export * from './entities/mission.js';

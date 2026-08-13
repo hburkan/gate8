@@ -258,15 +258,15 @@ Every relation must be able to contain context/configuration.
 
 Chapter is a content grouping, not the owner of entities.
 
-- [ ] chapters table.
-- [ ] chapter_locations.
-- [ ] chapter_cases.
-- [ ] chapter_missions.
-- [ ] chapter_story_nodes.
-- [ ] chapter unlock conditions.
-- [ ] chapter ordering.
-- [ ] chapter status.
-- [ ] chapter version.
+- [x] chapters table.
+- [x] chapter_locations.
+- [x] chapter_cases.
+- [ ] chapter_missions. (deferred — not required by Phase 4)
+- [ ] chapter_story_nodes. (deferred — not required by Phase 4)
+- [ ] chapter unlock conditions. (future additive migration)
+- [x] chapter ordering. (sort_order)
+- [x] chapter status.
+- [x] chapter version.
 
 Chapter must be able to reuse existing content.
 
