@@ -327,16 +327,16 @@ Example:
 
 ## 6.1 Character Pool
 
-- [ ] case_character_pool table.
-- [ ] caseId.
-- [ ] characterId.
-- [ ] weight.
-- [ ] required.
-- [ ] minItems.
-- [ ] maxItems.
-- [ ] role.
-- [ ] priority.
-- [ ] conditions.
+- [x] case_character_pool table. (Satisfied by `case_characters` — audit decision R1: the relation is the pool; no duplicate pool table.)
+- [x] caseId.
+- [x] characterId.
+- [x] weight.
+- [x] required.
+- [x] minItems.
+- [x] maxItems.
+- [x] role.
+- [x] priority.
+- [x] conditions.
 
 ---
 
