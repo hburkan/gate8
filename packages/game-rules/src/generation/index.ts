@@ -9,3 +9,6 @@ export * from './item-selection.js';
 export * from './document-errors.js';
 export * from './document-types.js';
 export * from './document-selection.js';
+export * from './evidence-errors.js';
+export * from './evidence-types.js';
+export * from './evidence-selection.js';

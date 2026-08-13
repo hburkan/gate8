@@ -432,6 +432,21 @@ Create:
 
 # PHASE 10 — EVIDENCE SYSTEM
 
+> **Note (approved Phase 10 implementation):** The approved Phase 10 evidence work
+> implements deterministic case evidence generation — the pure selection of a Case
+> Template's evidence set from the canonical `case_evidence` relation and
+> `cases.min_evidence`/`max_evidence`, implemented in `packages/game-rules`
+> (`selectEvidence`). `case_evidence` remains the canonical relation/pool; **no
+> `case_evidence_pool` table is required**. Evidence is single-instance (no
+> quantities). The four evidence types (REQUIRED/OPTIONAL/DECOY/HIDDEN) are encoded
+> in the single `role` column (free text in the DB, typed `EvidenceRole` union in
+> shared-types, R4); `required = role === 'required'` is the one role-derived
+> selection input and the stored `role`/`importance`/`discovery_method` values are
+> carried through unchanged. `discovery_method`, `discovery_condition`, `conditions`
+> remain opaque; `discovery_condition` evaluation is deferred to Phase 11 (rule
+> engine). Per-location evidence placement (`location_evidence`) is a separate
+> relation and is untouched.
+
 Evidence must support different types.
 
 Types:
