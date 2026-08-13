@@ -213,7 +213,29 @@ Semantics differ **by class** for operators that read context facts. The core wa
 | `difficulty`               | `cases.difficulty` equals `value`                                                         | `cases.difficulty` equals `value`        | the instance's template `difficulty` equals `value`     |
 | `previousDecision`         | **not usable** (no decisions at generation)                                               | not usable                               | the player's last decision id/ref equals `value`        |
 
-This table is the concrete answer to the conflation risk: the **same AST and same evaluator** are used everywhere, but `hasItem`/`hasEvidence`/`characterRole`/`locationType`/`difficulty`/`previousDecision` resolve differently per class through the class-specific context. Generation (A) may never call the runtime resolvers and vice versa — enforced by separate entry points taking separate context types (§13).
+This table is the concrete answer to the conflation risk: the **same AST and same evaluator** are used everywhere, but `hasItem`/`hasEvidence`/`characterRole`/`locationType`/`difficulty`/`previousDecision` resolve differently per class through the class-specific context. Generation (A) may never call the runtime resolvers and vice versa — enforced by separate entry points taking **nominally branded** context types (§13, §15.1) so the mixing is a compile-time error, not a convention.
+
+### 11.1 Exact Operator Contracts
+
+For each of the thirteen operators, the exact contract. "Resolved value" means `context.get(path)` per §12. "Missing" means the resolved value is `undefined`/`null`. Every failure case is a deterministic `false` (never a throw, never a silent `true`).
+
+| Operator           | Operand types                                             | Context fields read                                                                              | Generation meaning (A)                                                                            | Runtime meaning (B/C/D)                                                            | Missing value                                                    | Type mismatch                                                                | Unknown entity / ref                              | Arrays                                                 |
+| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| `and`              | `rules: Rule[]` (≥1)                                      | none directly (children)                                                                         | all children true                                                                                 | all children true                                                                  | n/a (parser rejects empty)                                       | n/a                                                                          | n/a                                               | yes — the operand IS a list                            |
+| `or`               | `rules: Rule[]` (≥1)                                      | none directly (children)                                                                         | ≥1 child true                                                                                     | ≥1 child true                                                                      | n/a (parser rejects empty)                                       | n/a                                                                          | n/a                                               | yes — the operand IS a list                            |
+| `not`              | `rule: Rule` (exactly 1)                                  | none directly (child)                                                                            | negation of child                                                                                 | negation of child                                                                  | n/a (parser rejects wrong arity)                                 | n/a                                                                          | n/a                                               | no — single child; compose `and`/`or` inside for lists |
+| `equals`           | `path: string`, `value: unknown` (scalar)                 | `get(path)`                                                                                      | resolved snapshot value `===` `value` (strict, no coercion)                                       | resolved runtime value `===` `value` (strict)                                      | `false` unless `value` is also `undefined` (missing ≠ any value) | `false` (e.g. number `value` vs string resolved)                             | unknown path ⇒ `false` (`UnknownPath` at publish) | no — `value` must be scalar; use `contains` for lists  |
+| `greaterThan`      | `path: string`, `value: number` (numeric string accepted) | `get(path)` as number                                                                            | resolved number `>` `value`                                                                       | resolved number `>` `value`                                                        | `false`                                                          | `false` — resolved value not a number/numeric string ⇒ `false` (no coercion) | unknown path ⇒ `false`                            | no                                                     |
+| `lessThan`         | `path: string`, `value: number` (numeric string accepted) | `get(path)` as number                                                                            | resolved number `<` `value`                                                                       | resolved number `<` `value`                                                        | `false`                                                          | `false` — same as `greaterThan`                                              | unknown path ⇒ `false`                            | no                                                     |
+| `contains`         | `path: string`, `value: unknown` (string or element)      | `get(path)`                                                                                      | string: `get(path)` contains substring `value`; array: array contains element `value`             | same                                                                               | `false`                                                          | resolved is neither string nor array ⇒ `false`                               | unknown path ⇒ `false`                            | yes — when resolved value is an array, membership test |
+| `hasItem`          | `ref: string`                                             | settled item set (A) / player inventory (runtime)                                                | true iff any **settled** item `id === ref                                                         |                                                                                    | name === ref`                                                    | true iff the **player currently possesses** an item `id === ref              |                                                   | name === ref`                                          | n/a (parser rejects missing `ref`) | n/a | `false`; publish warning if no entity named/identified by `ref` exists | no — membership over a set, not an array operand |
+| `hasEvidence`      | `ref: string`                                             | settled evidence set (A) / discovered evidence (runtime)                                         | true iff any **settled** evidence `id === ref                                                     |                                                                                    | name === ref`                                                    | true iff the **player has discovered** an evidence `id === ref               |                                                   | name === ref`                                          | n/a                                | n/a | `false`; publish warning as above                                      | no — membership over a set                       |
+| `characterRole`    | `value: string` (free text role, R4)                      | settled characters' `role` (A) / active character's `role` (runtime)                             | true iff any **settled** character `role === value`                                               | true iff the active/interacted character's `role === value` (false if none active) | `false` (no character / null role)                               | n/a (both strings)                                                           | n/a — roles are free text (R4)                    | no                                                     |
+| `locationType`     | `value: string`                                           | `location.type` of current location (runtime) / of the location being generated (location-level) | case-level: not meaningful ⇒ `false`; location-level generation: that location's `type === value` | true iff current location `type === value`                                         | `false` (no current location)                                    | n/a (both strings)                                                           | n/a — `type` is a free-text/union value           | no                                                     |
+| `difficulty`       | `value: string`                                           | `cases.difficulty`                                                                               | true iff `cases.difficulty === value`                                                             | true iff the instance's template `difficulty === value`                            | `false` (difficulty is `null`)                                   | n/a (both strings)                                                           | n/a — difficulty is free text (R4)                | no                                                     |
+| `previousDecision` | `value: string` (decision id/ref)                         | last recorded player decision                                                                    | **not usable** ⇒ always `false` (no decisions at generation); publish flags `DisallowedClassOp`   | true iff the last recorded decision's id/ref `=== value`                           | `false` (no decision recorded)                                   | n/a (both strings)                                                           | `false` (no decision with that ref)               | no                                                     |
+
+Authoring equivalence (canonical spellings): `{ op: 'hasItem', ref: 'phone' }` ≡ `{ op: 'equals', path: 'item.name', value: 'phone' }` (or `item.id`); `{ op: 'characterRole', value: 'businessman' }` ≡ `{ op: 'equals', path: 'character.role', value: 'businessman' }`. Both spellings are valid; §12.1 defines the closed path vocabulary they resolve against.
 
 ---
 
@@ -236,7 +258,21 @@ Built by Phase 12 from the version-pinned snapshot **plus the settled output of 
 | `characterRole(value)`                                      | any settled character role equals `value`                                                                                                   |
 | custom flags (e.g. `fake_invoice`)                          | **not present** — a generation context has no play state; a rule referencing it at generation evaluates `false` (validated at publish, §39) |
 
-Path resolution: `path` is a dot-separated lookup into the context (e.g. `character.role`, `evidence.importance`, `difficulty`). A missing path resolves to `undefined` ⇒ comparison operators return `false` (deterministic, §23).
+Path resolution: `path` resolves against the **closed vocabulary below** — no arbitrary unrestricted object-path traversal (a `path` like `character.items.0.name` is rejected by the parser as `UnknownPath`). Each path maps to an explicit resolver:
+
+| Path                                    | Class | Resolution                                                                                    |
+| --------------------------------------- | ----- | --------------------------------------------------------------------------------------------- |
+| `case.difficulty`                       | A / D | `cases.difficulty` (free text, R4)                                                            |
+| `case.type`                             | A / D | `cases.type` (free text)                                                                      |
+| `character.role`                        | A     | **exists** — any settled character `role === value` (equiv. `characterRole`)                  |
+| `character.occupation`                  | A     | **exists** — any settled character `occupation === value` (entity attribute)                  |
+| `item.id` / `item.name`                 | A     | **exists** — any settled item `id`/`name === value` (equiv. `hasItem`)                        |
+| `document.role`                         | A     | **exists** — any settled document `role === value`                                            |
+| `evidence.role` / `evidence.importance` | A     | **exists** — any settled evidence `role`/`importance === value`                               |
+| `location.type`                         | C / D | current location's `type` (runtime); the location being generated (location-level generation) |
+| `previousDecision`                      | D     | last recorded player decision id/ref                                                          |
+
+Semantics: a single-scalar path (`case.difficulty`, `location.type`) resolves to one value; a collection path (`character.role`, `item.name`, …) resolves by **existence** (any settled element matches — the worked examples are exactly this form). A missing path resolves to `undefined` ⇒ comparison operators return `false` (deterministic, §23). Any other path is `UnknownPath` (parser rejects at publish, §39); the evaluator returns `false` defensively.
 
 ### 12.2 `RuntimeContext` (classes B/C/D)
 
@@ -250,6 +286,8 @@ Built by Phase 14/36 from the Case Instance + player state:
 | `characterRole(value)`                            | the currently active/interacted character's role                                     |
 | `locationType(value)`                             | the player's current location type                                                   |
 | custom runtime flags (e.g. `fake_invoice = true`) | instance runtime state set by actions/engine (dialogue actions, evidence inspection) |
+
+Runtime flag paths: a dot-free path that is not in the §12.1 vocabulary (e.g. `fake_invoice`, `suspicious_luggage_opened`) resolves from the instance's flat runtime-flag map. These are the **only** dynamic paths; everything else must be in the closed vocabulary.
 
 Both contexts are plain immutable value maps; the evaluator never mutates them and never persists them.
 
@@ -266,17 +304,21 @@ Both contexts are plain immutable value maps; the evaluator never mutates them a
   - `evaluateAvailability(availability: boolean, conditions, runtimeContext)` → boolean (class C; static flag ANDed with any runtime conditions).
   - `evaluateRuntime(conditions, runtimeContext)` → boolean (class D; dialogue/mission).
 
-This gives the best of both designs: **no duplicated operator logic** (one walker), and **no semantic conflation** (each class has a distinct typed boundary; `GenerationContext` does not satisfy a runtime entry point's parameter and vice versa). A separate-evaluators-per-class design would duplicate the entire operator switch four times; a single-blind-evaluator design would make `previousDecision` or player-inventory `hasItem` silently meaningful at generation. The chosen design avoids both.
+**Nominal context branding (point 1/5 of the review).** `GenerationContext` and `RuntimeContext` are **nominally branded**, not just "marker types": each carries a unique `readonly kind` discriminant (§15.1). Under structural typing two types with identical members are mutually assignable, so unbranded marker types would NOT block a `RuntimeContext` being passed to `evaluateEligibility`. The `kind` discriminant makes `GenerationContext` and `RuntimeContext` structurally incompatible, so a cross-class call is a **compile-time error**. The shared `RuleContext` base (implemented by both) is deliberately narrow and contains only the resolver methods; the brand lives on the concrete classes the public entry points accept.
+
+This gives the best of both designs: **no duplicated operator logic** (one walker), and **no semantic conflation** (each class has a distinct typed boundary; `GenerationContext` does not satisfy a runtime entry point's parameter and vice versa — enforced by the `kind` discriminant, not convention). A separate-evaluators-per-class design would duplicate the entire operator switch four times; a single-blind-evaluator design would make `previousDecision` or player-inventory `hasItem` silently meaningful at generation. The chosen design avoids both.
 
 ---
 
 ## 14. Rule Payload Normalization
 
-The parser (`parseRulePayload(payload)` / `parseRuleArray(payload)`) maps the three existing carrier shapes onto the single AST, resolving the §3 shape inconsistency **without a migration**:
+The parser (`parseRulePayload(payload)` / `parseRuleArray(payload)`) maps the three existing carrier shapes onto the single AST, resolving the §3 shape inconsistency **without a migration**. Exact normalization rules:
 
-- **Array shape** (relations, dialogue): each element must parse as a `Rule`; `[]` ⇒ no rules (all eligible / always available — exactly Phase 6–10 behavior).
-- **Object shape** (mission `completion_condition`): parsed as a single `Rule`; `{}` ⇒ no rule (mission completes by no-op — current behavior).
-- **Malformed payload** (unknown `op`, missing fields, wrong arity for `not`/`and`/`or`): the parser returns a deterministic `InvalidRule` error. At **publish time** (Phase 26) this rejects the content; at **generation time** it surfaces as a snapshot validation failure. The evaluator itself never sees a malformed AST.
+- **`[]` (empty array — relations, dialogue) ⇒ no rules ⇒ evaluates `true`** (all eligible / always available). This is the Phase 6–10 backward-compatibility guarantee: existing empty-condition rows behave exactly as before (§9 point).
+- **`[rule1, rule2, …]` ⇒ implicit AND** of the elements (`evaluateRules`). The array form is ALWAYS a conjunction — it is never inferred as OR, never as NOT, and never as a grouping. To express OR or NOT an author MUST write an explicit `GroupRule` (`{ op: 'or', rules: [...] }`) or `NotRule` (`{ op: 'not', rule }`). Grouping is only ever explicit in the AST; it is never inferred from array nesting.
+- **`{}` (empty object — mission `completion_condition`) ⇒ no rule ⇒ evaluates `true`** (mission completes by no-op — current behavior). A non-empty object parses as a single `Rule`.
+- **`null`** (e.g. nullable `discovery_condition`) ⇒ no rule ⇒ evaluates `true` (always discoverable). `undefined`/absent is treated identically to `null`.
+- **Malformed payload** (unknown `op`, missing fields, wrong arity for `not`/`and`/`or`, non-object element, empty `and`/`or` `rules`): the parser returns a deterministic `InvalidRule` error. At **publish time** (Phase 26) this rejects the content; at **generation time** it surfaces as a snapshot validation failure. The evaluator itself never sees a malformed AST. A malformed rule is NEVER coerced to `true` (which would silently include content); it is an explicit error.
 - Unknown JSONB keys are rejected by the parser (not silently ignored), so a typo like `"eqauls"` cannot silently become an always-true rule.
 
 The Phase 11 build step updates content-schema's `relationConditionsSchema` / `rulePayloadSchema` / mission `completionCondition` to validate against a zod mirror of the `Rule` union, preserving both shapes (`z.union([ruleSchema, z.array(ruleSchema)])`), so authors keep writing either form and both remain representable.
@@ -288,10 +330,11 @@ The Phase 11 build step updates content-schema's `relationConditionsSchema` / `r
 ### 15.1 `RuleContext`
 
 ```ts
+/** Shared resolver surface; deliberately narrow (no state access). */
 interface RuleContext {
-  /** dot-path → value; missing paths resolve to `undefined`. */
+  /** Path resolution per §12.1 closed vocabulary; unknown paths → undefined. */
   get(path: string): unknown;
-  /** hasItem / hasEvidence (class-specific semantics, §11). */
+  /** hasItem / hasEvidence (class-specific semantics, §11.1). */
   hasItem(ref: string): boolean;
   hasEvidence(ref: string): boolean;
   characterRole(value: string): boolean;
@@ -299,16 +342,26 @@ interface RuleContext {
   difficulty(value: string): boolean;
   previousDecision(value: string): boolean;
 }
+
+/** Nominally branded (kind discriminant) so the two contexts are NOT
+ *  structurally interchangeable — see §13. Building one from the other
+ *  is a compile-time error, preventing class-A/runtime conflation. */
+interface GenerationContext extends RuleContext {
+  readonly kind: 'generation';
+}
+interface RuntimeContext extends RuleContext {
+  readonly kind: 'runtime';
+}
 ```
 
-`GenerationContext` and `RuntimeContext` are implementations built by `buildGenerationContext(snapshot, settled)` (Phase 12) and `buildRuntimeContext(instance)` (Phase 14). Phase 11 defines the interface and the core; the Phase 12/14 build steps provide the concrete builders.
+`GenerationContext` and `RuntimeContext` are built by `buildGenerationContext(snapshot, settled)` (Phase 12) and `buildRuntimeContext(instance)` (Phase 14); the builders are the only way to construct them. Phase 11 defines the interface, the brand, and the core; the Phase 12/14 build steps provide the concrete builders. `RuleContext` itself is not a public entry-point parameter — only the branded concrete types are.
 
 ### 15.2 Entry points (Phase 11 public API)
 
 ```ts
 parseRulePayload(payload: unknown): Rule[]            // normalization (§14)
-evaluateRule(rule: Rule, ctx: RuleContext): boolean   // shared core
-evaluateRules(rules: Rule[], ctx: RuleContext): boolean
+evaluateRule(rule: Rule, ctx: RuleContext): boolean   // shared core (internal composition)
+evaluateRules(rules: Rule[], ctx: RuleContext): boolean  // implicit AND over array
 evaluateEligibility(conditions: Rule[], ctx: GenerationContext): boolean   // class A
 evaluateDiscovery(condition: Rule, ctx: RuntimeContext): boolean           // class B
 evaluateAvailability(availability: boolean, conditions: Rule[], ctx: RuntimeContext): boolean  // class C
@@ -349,19 +402,21 @@ Per the worked examples: evidence `imei_mismatch` carries `conditions: [{ op: 'h
 
 This is the section that proves the Phase 6–10 contract is unchanged. Let `R` = required rows, `E` = eligible rows, `P` = pool rows.
 
-**Where the filter runs (identical in all four generators):**
+**Where the filter runs (identical in all four generators — verified `48d7acf`):**
 
 ```
 canonical  = canonicalOrder(P)                        // (priority ASC, id ASC)
-eligible   = filter ? canonical.filter(filter) : canonical
+eligible   = filter ? canonical.filter(filter) : canonical   // selection.ts:43 (chars), item-selection.ts:46, document-selection.ts:45, evidence-selection.ts:52
 required   = eligible.filter(isRequired)
 optional   = eligible.filter(!isRequired)
 lower      = max(minBound, |R|)
 upper      = maxBound > 0 ? min(maxBound, |E|) : |E|
-target     = lower + rng.int(upper - lower + 1)       // draw #1 (count)
+target     = lower + rng.int(upper - lower + 1)       // draw #1 (count) — selection.ts:80, item/document:82, evidence:89
 ... per optional slot: weightedPick(pool, rng.float())  // one float each
 ... items only, after selection: quantity = drawQuantity(rng, bounds)  // one int per selected item
 ```
+
+**Zero-PRNG proof (determinism, review point 4).** `createSeededRandom` is created at line 40/43/42/49 — creation draws nothing. The eligibility filter runs at line 43/46/45/52, **before** the first `rng.*` call (the count draw at line 80/82/82/89). The predicate's signature is `(candidate) => boolean`: it receives only the candidate row and cannot touch `rng`, the DB, instance state, or any non-deterministic source. Rule evaluation therefore consumes **exactly zero** PRNG draws by construction. Same (snapshot incl. evaluated conditions, seed) ⇒ same eligible pool ⇒ same draw sequence ⇒ identical output.
 
 **How conditions affect each component:**
 
@@ -444,13 +499,14 @@ Rule _evaluation_ never throws: every operator returns a boolean, and impossible
 | Parser (§14)            | `InvalidRule`                                                                                                                                 | unknown `op`; missing/incorrect fields; wrong arity; non-object element; unknown JSONB key                                                                         |
 | Publish validator (§39) | `UnsatizableRequiredCondition`, `UnknownPath`, `UnknownRef`, `DisallowedClassOp` (e.g. `previousDecision` in class A), `AlwaysFalseDiscovery` | unsatisfiable required-row condition; path/ref never resolvable in the class context; class-inappropriate operator; discovery condition that can never become true |
 
-Null/missing-value semantics (core):
+Null/missing-value semantics (core, matching §11.1):
 
-- `context.get(path) === undefined` ⇒ `equals` false (unless `value === undefined`), `greaterThan`/`lessThan` false, `contains` false.
-- Type mismatch (`value` is a string, resolved value is a number) ⇒ `false` for comparisons; `greaterThan`/`lessThan` compare numbers or numeric strings only.
+- `context.get(path) === undefined` (unknown path in the closed vocabulary, or a scalar path with a null value) ⇒ `equals` false (unless `value === undefined`), `greaterThan`/`lessThan` false, `contains` false.
+- Type mismatch (`value` is a string, resolved value is a number) ⇒ `false` for comparisons; `greaterThan`/`lessThan` compare numbers or numeric strings only (no coercion).
 - `hasItem`/`hasEvidence` with an unknown `ref` ⇒ `false` at runtime; a **publish-time warning** if no entity named/identified by `ref` exists.
+- `characterRole`/`locationType`/`difficulty`/`previousDecision` with no resolvable value (no active character, no current location, `null` difficulty, no decision recorded) ⇒ `false`.
 - `and`/`or` short-circuit (safe: no side effects); `not` negates.
-- Empty payload (`[]`/`{}`) ⇒ `true` (all eligible / always available) — preserves Phase 6–10 behavior.
+- Empty payload (`[]`/`{}`/`null`) ⇒ `true` (all eligible / always available) — preserves Phase 6–10 behavior (§14).
 
 All parse/validation errors are data-driven and report the offending payload and carrier, so authors can fix content rather than debug silent misbehavior.
 
@@ -525,14 +581,7 @@ All parse/validation errors are data-driven and report the offending payload and
 
 ## 32. Phase 26 Interaction (Content Validation)
 
-Phase 26 adds publish-time rule checks (TODO §26 "Validate impossible rules"):
-
-- **Parse** every rule payload in the releasing content set; any `InvalidRule` blocks publish.
-- **Class-appropriate operators:** `previousDecision` in a class-A context, or player-inventory `hasItem` at generation, blocks publish (`DisallowedClassOp`).
-- **Path/ref existence:** every `path`/`ref` must resolve in its class context (snapshot for A, instance state model for B/C/D); unknown path/ref blocks or warns per §23.
-- **Unsatisfiable required rows:** evaluate each required row's class-A conditions over the maximal snapshot (all rows eligible); a required row that can never be eligible blocks publish (prevents the §17 shrink/`PoolBelowMinimum` class of runtime failures).
-- **Always-false discovery:** `discovery_condition` whose referenced flags are never settable blocks publish (evidence would be permanently undiscoverable).
-- **Solvability (TODO §26 "Validate case solvability"):** the validator must prove a satisfiable world under the rules (at least one suspect, at least one critical evidence, required documents/characters/items reachable) — the Phase 13 rule set, checked against evaluated eligibility.
+Phase 26 adds publish-time rule checks (TODO §26 "Validate impossible rules"). The exact list of hooks is specified in §39: malformed rules (`InvalidRule`), unknown paths (`UnknownPath`), unknown entity refs (warn), disallowed operators for a class (`DisallowedClassOp`), impossible required conditions, always-false discovery, and solvability. Each hook runs over every released payload; Phase 11 provides the parser and evaluator the hooks call but implements none of the publish gating.
 
 ---
 
@@ -551,8 +600,8 @@ All changes are **Phase 11 build-step** work (this document only specifies them)
 `packages/game-rules` (new):
 
 - `src/rules/ast.ts` — moves/re-exports the existing `Rule` union, `RULE_OPERATORS`, `RuleOperator` from `src/index.ts` (index re-exports; public API unchanged).
-- `src/rules/context.ts` — `RuleContext` interface; `GenerationContext` and `RuntimeContext` marker types; `buildGenerationContext`/`buildRuntimeContext` (builders filled by Phase 12/14, interface + base resolution here).
-- `src/rules/parse.ts` — `parseRulePayload`, `parseRuleArray`, `InvalidRule` error.
+- `src/rules/context.ts` — `RuleContext` shared resolver surface; nominally branded `GenerationContext` (`kind: 'generation'`) and `RuntimeContext` (`kind: 'runtime'`); `buildGenerationContext`/`buildRuntimeContext` (builders filled by Phase 12/14, interface + brand + base resolution here).
+- `src/rules/parse.ts` — `parseRulePayload`, `parseRuleArray`, `InvalidRule` error, `UnknownPath` guard for the §12.1 closed vocabulary.
 - `src/rules/evaluate.ts` — `evaluateRule`, `evaluateRules`, `evaluateEligibility`, `evaluateDiscovery`, `evaluateAvailability`, `evaluateRuntime` (§13/§15).
 - `src/rules/index.ts` — re-export; update `src/index.ts` to re-export `./rules/index.js`.
 - Update package `description` (drop "ships in Phase 11").
@@ -575,7 +624,9 @@ Design-level plan for the Phase 11 build step (no tests written in this document
 
 - **Evaluator unit tests:** every operator; nesting (`and`/`or`/`not`); short-circuiting; missing-path ⇒ false; type mismatch ⇒ false; numeric-string comparisons; `contains` on strings and arrays; empty payload ⇒ true.
 - **Class semantics tests:** `hasItem`/`hasEvidence`/`characterRole`/`previousDecision` resolution differs per class; generation contexts reject runtime-only operators at parse/validation.
-- **Parser tests:** array vs object shape; `[]`/`{}` ⇒ no rules; every malformed case → `InvalidRule`.
+- **Parser tests:** array vs object vs `null` shape; `[]`/`{}`/`null` ⇒ no rules ⇒ `true`; `[r1, r2]` ⇒ implicit AND (never OR/NOT inferred); explicit `GroupRule`/`NotRule` nesting; every malformed case → `InvalidRule`; unknown `path` → `UnknownPath`.
+- **Context isolation tests:** a `RuntimeContext` is a compile-time error where a `GenerationContext` is expected (branded `kind`); generation evaluation never reads player state; `previousDecision`/player-inventory `hasItem` are `false` at generation and `true`-reachable only at runtime.
+- **Path-vocabulary tests:** each §12.1 path resolves as specified (scalar vs existence); collection paths match the worked examples; out-of-vocabulary paths → `UnknownPath`/`false`.
 - **Determinism + golden tests:** fixed seed + fixed snapshot (with conditions) ⇒ identical output, pinned; **unchanged Phase 6–10 golden tests must pass unmodified** (empty conditions ≡ no filter).
 - **Eligibility-integration tests** (per generator): conditions narrow the pool; the PRNG draw count and order are identical for a fixed eligible pool with and without a filter; `NoEligible*` / `PoolBelowMinimum` / `RequiredExceedsMax` surface for unsatisfiable required rows.
 - **Worked-example tests:** the three TODO examples authored as payloads evaluate as specified (example 1/2 at generation; example 3 at runtime).
@@ -608,8 +659,8 @@ Deliberately out of Phase 11 scope (designed here, implemented elsewhere):
 
 ## 38. Risks and Architectural Concerns
 
-- **Semantic conflation (highest risk).** A single blind evaluator would let `previousDecision`, player-inventory `hasItem`, or runtime flags silently mean something (or nothing) at generation. Mitigation: separate typed entry points per class with distinct context types (§13), plus Phase 26 `DisallowedClassOp` checks (§39).
-- **`hasItem`/`hasEvidence` ambiguity.** The same operator means "case contains X" at generation and "player holds X" at runtime. Mitigation: the §11 per-class table and the distinct contexts make the meaning explicit; the design documents it in §11/§19/§21.
+- **Semantic conflation (highest risk).** A single blind evaluator would let `previousDecision`, player-inventory `hasItem`, or runtime flags silently mean something (or nothing) at generation. Mitigation: separate typed entry points per class with **nominally branded** context types (§13/§15.1, D9), plus Phase 26 `DisallowedClassOp` checks (§39).
+- **`hasItem`/`hasEvidence` ambiguity.** The same operator means "case contains X" at generation and "player holds X" at runtime. Mitigation: the §11.1 exact contracts and the distinct contexts make the meaning explicit; nominal branding (D9) makes mixing impossible; documented in §11.1/§19/§21.
 - **Eligibility shrinking the pool.** Conditions can make generation fail (`PoolBelowMinimum`, `NoEligible*`) or drop required rows. Mitigation: deterministic errors (never silent fallback), publish-time checks (§39), Phase 13 backstop; authors are told a required row's conditions must be satisfiable.
 - **Determinism regressions.** Any change to draw order, canonical ordering, or pool semantics is breaking. Mitigation: the filter-runs-before-draw-#1 property (§17), unchanged golden tests (§35), and the explicit "conditions never call the PRNG" rule.
 - **Shape mismatch (array vs object).** Mission `completion_condition` is an object while relations/dialogue are arrays. Mitigation: the §14 normalizer accepts both; content-schema validates both forms.
@@ -620,14 +671,15 @@ Deliberately out of Phase 11 scope (designed here, implemented elsewhere):
 
 ## 39. Publish-Time Validation (Phase 26 preview)
 
-The validator that Phase 26 will implement, specified now so the design is complete:
+The validator that Phase 26 will implement, specified now so the design is complete. It is a list of **hooks**, each run over every released payload; Phase 11 defines only the parser/evaluator they call:
 
-1. Parse all rule payloads in the release; collect every `InvalidRule`.
-2. For each class-A payload, verify every operator is class-legal for the carrier; flag `previousDecision` and player-state operators.
-3. Resolve every `path`/`ref` against the class context; flag unknowns.
-4. Evaluate each required row's class-A conditions over the maximal snapshot; flag rows that are never eligible.
-5. Verify each `discovery_condition`'s referenced flags can be set by some action/engine path; flag permanently-unreachable evidence.
-6. Run the Phase 13 solvability rules against evaluated eligibility (suspect present, critical evidence reachable, required items/documents reachable).
+1. **Malformed rules:** parse every rule payload in the release; collect every `InvalidRule` (unknown `op`, wrong arity, non-object element, empty `and`/`or`, unknown JSONB key) — blocks publish.
+2. **Unknown paths:** for every `ComparisonRule`, verify `path` is in the §12.1 closed vocabulary for its class; `UnknownPath` blocks publish.
+3. **Unknown entity references:** for every `hasItem`/`hasEvidence` `ref`, verify an entity named/identified by `ref` exists in the release; warn if unresolved.
+4. **Disallowed operators for a class:** verify every operator is class-legal for its carrier; `previousDecision` (and player-inventory operators) in class A, or player-state `hasItem` at generation, blocks publish (`DisallowedClassOp`).
+5. **Impossible required conditions:** evaluate each required row's class-A conditions over the maximal snapshot (all rows eligible); a required row that can never be eligible blocks publish (prevents the §17 shrink/`PoolBelowMinimum` class of runtime failures).
+6. **Unreachable content / always-false discovery:** verify each `discovery_condition`'s referenced flags can be set by some action/engine path; permanently-unreachable evidence blocks publish.
+7. **Solvability (TODO §26 "Validate case solvability"):** prove a satisfiable world under the rules (at least one suspect, at least one critical evidence, required documents/characters/items reachable) — the Phase 13 rule set, checked against evaluated eligibility.
 
 A template failing any of these is rejected before publish; no silent content reaches players.
 
@@ -635,16 +687,19 @@ A template failing any of these is rejected before publish; no silent content re
 
 ## 40. Decision Log
 
-| #   | Decision                                                               | Rationale                                                             |
-| --- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| D1  | One pure evaluation core over the shared `Rule` AST                    | No duplicated operator logic across four classes                      |
-| D2  | Separate typed entry points + contexts per condition class             | Makes conflation (A/B/C/D) structurally impossible                    |
-| D3  | Class A wired through the existing `eligibilityFilter` before draw #1  | Reuses the Phase 6–10 hook; zero PRNG consumption; contract preserved |
-| D4  | No retry / no relaxed fallback for unsatisfiable conditions            | Preserves determinism; errors surface at Phase 13/26                  |
-| D5  | `availability`/`hidden`/`role` stay static data; rules only add gating | Avoids duplicating existing signal (Phase 10 §7)                      |
-| D6  | Normalizer accepts both single-object and array payloads               | Resolves the mission-vs-relation shape mismatch without a migration   |
-| D7  | Missing path / type mismatch ⇒ deterministic `false`                   | No silent true; publish validator reports root cause                  |
-| D8  | No migration, no new tables, no new SQL enums                          | All storage exists; R4 respected                                      |
+| #   | Decision                                                                                 | Rationale                                                                                  |
+| --- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| D1  | One pure evaluation core over the shared `Rule` AST                                      | No duplicated operator logic across four classes                                           |
+| D2  | Separate typed entry points + contexts per condition class                               | Makes conflation (A/B/C/D) structurally impossible                                         |
+| D3  | Class A wired through the existing `eligibilityFilter` before draw #1                    | Reuses the Phase 6–10 hook; zero PRNG consumption; contract preserved                      |
+| D4  | No retry / no relaxed fallback for unsatisfiable conditions                              | Preserves determinism; errors surface at Phase 13/26                                       |
+| D5  | `availability`/`hidden`/`role` stay static data; rules only add gating                   | Avoids duplicating existing signal (Phase 10 §7)                                           |
+| D6  | Normalizer accepts both single-object and array payloads                                 | Resolves the mission-vs-relation shape mismatch without a migration                        |
+| D7  | Missing path / type mismatch ⇒ deterministic `false`                                     | No silent true; publish validator reports root cause                                       |
+| D8  | No migration, no new tables, no new SQL enums                                            | All storage exists; R4 respected                                                           |
+| D9  | **Nominally branded contexts** (`GenerationContext.kind` vs `RuntimeContext.kind`)       | Structural typing would otherwise allow cross-class call misuse (§13)                      |
+| D10 | **Closed path vocabulary** (§12.1) instead of free object-path traversal                 | Review point 6: no arbitrary `a.b.c` access; explicit scalars + existence collection paths |
+| D11 | Array payload is **always** implicit AND; OR/NOT only via explicit `GroupRule`/`NotRule` | Grouping is never inferred; malformed is `InvalidRule`, never coerced to `true` (§14)      |
 
 ---
 
@@ -653,18 +708,42 @@ A template failing any of these is rejected before publish; no silent content re
 - [x] Global constraints stated (one AST, four entry points, no tables/enums, no new sources of truth, determinism preserved, no AI/UI).
 - [x] All 42 required sections present in order (objective → decision log).
 - [x] §9 separates generation eligibility (A), discovery (B), availability (C), runtime/gameplay (D); never conflated.
-- [x] §13 answers the evaluator question: one core + shared AST, separate per-class APIs/contexts.
-- [x] §17 proves conditions' effect on required/optional/bounds/PRNG and that the Phase 6–10 draw sequence is unchanged.
+- [x] §11.1 exact operator contracts: operand types, context fields, generation/runtime meanings, missing/type-mismatch/unknown-ref/array behavior for all 13 operators.
+- [x] §12.1 closed path vocabulary (scalar vs existence collection paths; no arbitrary traversal); §12.2 runtime flag paths.
+- [x] §13 answers the evaluator question: one core + shared AST, separate per-class APIs/contexts with **nominal branding** (D9).
+- [x] §14 exact normalization: `[]`/`{}`/`null` ⇒ true; array ⇒ implicit AND only (D11); malformed ⇒ `InvalidRule`.
+- [x] §15.1 branded context types; `RuleContext` is not a public entry-point parameter.
+- [x] §17 proves conditions' effect on required/optional/bounds/PRNG with file:line refs and the **zero-PRNG-draw proof** (D3).
 - [x] §5/§36 verdict: no migration required.
 - [x] §34 lists proposed code/package changes; none touch the DB, Admin, or Mobile.
-- [x] §35 testing strategy defined (for the Phase 11 build step).
+- [x] §35 testing strategy defined (for the Phase 11 build step); §39 seven named publish-validation hooks (Phase 26-only).
 - [x] §37 deferred features explicit (runtime action execution, pipeline, instance, publish validator, UI).
-- [x] §38 risks + mitigations; §39 publish-time validation; §40 decision log.
+- [x] §38 risks + mitigations; §39 publish-time validation; §40 decision log incl. D9–D11.
+- [x] Review point coverage: (1) gen/runtime hasItem semantics §11.1; (2) normalization §14; (3) 13 operator contracts §11.1; (4) zero-PRNG proof §17; (5) context isolation/branding §13/§15.1; (6) resolver/vocabulary §12; (7) required-condition failure §17; (8) publish hooks §39; (9) backward compat `[]`/`{}` §14; (10) resolved ambiguities §41.
 - [x] TODO §11 / §11.1 (13 operators) fully covered; Phase 12/13/14/26/36 roadmap items confirmed in TODO.md (§475–508, §512+, §948+, §1172+).
 - [x] No code, migration, shared-types, content-schema, Admin, or Mobile change made by this document.
 
 ---
 
+## 41. Review Resolution (2026-08-13)
+
+Outcome of the final architecture review; each item marks an ambiguity or a confirmation:
+
+1. **`hasItem`/`hasEvidence` semantics** — Confirmed & tightened. Generation = settled-case membership (item/evidence `id`/`name`); runtime = player possession/discovery. Enforced structurally: nominal `kind` branding (§13, D9) makes a cross-class call a compile error. Resolved in §11.1.
+2. **Conditions normalization** — Made fully explicit (§14, D11): `[]` ⇒ true, `[r1,r2]` ⇒ implicit AND (never OR/NOT inferred — grouping only via explicit `GroupRule`/`NotRule`), `{}`/`null` ⇒ true, malformed ⇒ `InvalidRule` (never coerced to `true`).
+3. **Operator semantics** — Added §11.1 exact contract table for all 13 operators (operand types, context fields, generation/runtime meaning, missing-value, type-mismatch, unknown-ref, arrays).
+4. **Determinism** — Proven (§17) with verified file:line refs: `eligibilityFilter` runs before the first `rng.*` call and receives only the candidate (no rng access); rule evaluation consumes zero PRNG draws. Existing golden tests already cover the filter and remain unmodified.
+5. **Context isolation** — Real gap found & fixed: §15.1 previously described unbranded marker types, which structural typing would allow to interconvert. Now `GenerationContext`/`RuntimeContext` carry disjoint `kind` discriminants; `RuleContext` is not a public entry-point parameter (D9).
+6. **Resolver behavior** — Added a **closed path vocabulary** (§12.1): scalar paths (`case.difficulty`, `location.type`, `previousDecision`) vs existence collection paths (`character.role`, `character.occupation`, `item.id/name`, `document.role`, `evidence.role/importance`); out-of-vocabulary paths are `UnknownPath`. No arbitrary `a.b.c` object traversal (D10). Runtime dot-free flags are the only dynamic paths (§12.2).
+7. **Required-condition failure** — Confirmed (§17): a required row with a false condition drops out of `E`/`R` ⇒ deterministic `PoolBelowMinimum`/`NoEligible*`/`RequiredExceedsMax`; no retry, no relaxed re-evaluation, no silent inclusion. Publish-time (Phase 26 hook 5) + Phase 13 backstop.
+8. **Publish-time validation** — Specified §39 as seven named hooks (malformed → unknown path → unknown ref → disallowed class op → impossible required → unreachable/always-false discovery → solvability); Phase 11 implements only the parser/evaluator they call.
+9. **Backward compatibility** — Confirmed (§14/§17/§23): empty `[]`/`{}`/`null` evaluate `true` ⇒ Phase 6–10 seeded behavior is byte-identical; golden tests unchanged.
+10. **Document updates** — All resolved decisions written back: §11.1, §12.1, §12.2, §13, §14, §15.1, §15.2, §17, §23, §32, §34, §35, §39, §40 (D9–D11), §41.
+
+No code, migration, content-schema, shared-types, Admin, or Mobile change was made during this review.
+
+---
+
 ## Conclusion
 
-Phase 11 (Rule / Condition Engine) requires **no schema change and no new tables**: every condition already lives in existing JSONB columns, and the `Rule` union — the AST — is already declared in `@gate8/game-rules`. The design resolves the one architectural question (one evaluator or several) as **one pure evaluation core over the shared AST, exposed through four class-specific entry points and contexts**, so generation eligibility, discovery, availability, and runtime/gameplay semantics are data-driven, deterministic, and impossible to conflate. Generation eligibility plugs into the Phase 6–10 `eligibilityFilter` hooks before draw #1, consuming zero PRNG draws and preserving the seeded deterministic contract byte-for-byte for unchanged content. Implementation belongs in `packages/game-rules` (`src/rules/`: ast, context, parse, evaluate, index) in the Phase 11 build step, with content-schema validation upgraded in the same step; this document freezes the contract.
+Phase 11 (Rule / Condition Engine) requires **no schema change and no new tables**: every condition already lives in existing JSONB columns, and the `Rule` union — the AST — is already declared in `@gate8/game-rules`. The design resolves the one architectural question (one evaluator or several) as **one pure evaluation core over the shared AST, exposed through four class-specific entry points and nominally branded contexts**, so generation eligibility, discovery, availability, and runtime/gameplay semantics are data-driven, deterministic, and impossible to conflate at compile time. Generation eligibility plugs into the Phase 6–10 `eligibilityFilter` hooks before draw #1, consuming zero PRNG draws and preserving the seeded deterministic contract byte-for-byte for unchanged content. The final review tightened five areas — §11.1 exact operator contracts, §12.1/12.2 closed path vocabulary, §13/§15.1 nominal context branding, §14 array-is-always-AND normalization, and §39 named publish-validation hooks (§41) — with no change to the schema or generator contract. Implementation belongs in `packages/game-rules` (`src/rules/`: ast, context, parse, evaluate, index) in the Phase 11 build step, with content-schema validation upgraded in the same step; this document freezes the contract.
