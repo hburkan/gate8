@@ -15,3 +15,5 @@ export * from './evidence-selection.js';
 export * from './pipeline-types.js';
 export * from './pipeline-errors.js';
 export * from './pipeline.js';
+export * from './seed.js';
+export * from './validate.js';

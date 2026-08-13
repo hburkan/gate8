@@ -599,22 +599,22 @@ Random generation must NEVER produce an impossible case.
 
 Examples:
 
-- [ ] At least one suspect.
-- [ ] At least one critical evidence.
-- [ ] Required document must exist.
-- [ ] Required character must exist.
-- [ ] Evidence dependencies must exist.
-- [ ] Dialogue dependencies must exist.
-- [ ] Required item must exist.
-- [ ] Case must remain solvable.
+- [ ] At least one suspect. _(content semantics — role/dialogue graph; Phase 26 publish validation)_
+- [ ] At least one critical evidence. _(content semantics — role/importance; Phase 26)_
+- [x] Required document must exist. _(Phase 12 required selection + Phase 13 `validateGeneratedCase`)_
+- [x] Required character must exist. _(same structural guarantee, character step)_
+- [x] Evidence dependencies must exist. _(class-A condition dependencies enforced at generation; cross-content bookkeeping Phase 26)_
+- [ ] Dialogue dependencies must exist. _(no dialogue generation yet; runtime + Phase 26)_
+- [x] Required item must exist. _(same structural guarantee, item step)_
+- [ ] Case must remain solvable. _(runtime/content-graph property; Phase 26 + Phase 36 runtime)_
 
 Add:
 
-- [ ] Generation validation.
-- [ ] Retry mechanism.
-- [ ] Maximum retry limit.
-- [ ] Fallback generation.
-- [ ] Error reporting.
+- [x] Generation validation. _(Phase 1 validation + Phase 12 per-step generator errors + `validateGeneratedCase`)_
+- [x] Retry mechanism. _(retry = `generateCase(snapshot, newSeed)`, Phase 13 `deriveRetrySeed`)_
+- [ ] Maximum retry limit. _(orchestration/instance policy; Phase 14 instance metadata)_
+- [ ] Fallback generation. _(intentionally NOT implemented — relaxation breaks determinism/atomicity; only sanctioned re-run is a new seed)_
+- [x] Error reporting. _(typed `GenerationPipelineResult` errors; retries surface the identical union)_
 
 ---
 
