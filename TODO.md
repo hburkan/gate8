@@ -288,21 +288,21 @@ Example:
 
 ## 5.1 Case Template
 
-- [x] cases table. (anchor created in Phase 3, migration 0011; extended here)
+- [x] cases table. (anchor created in Phase 3, migration 0011; extended in Phase 5, migration 0016)
 - [x] title.
 - [x] description.
-- [ ] type.
-- [ ] difficulty.
-- [ ] minCharacters.
-- [ ] maxCharacters.
-- [ ] minItems.
-- [ ] maxItems.
-- [ ] minDocuments.
-- [ ] maxDocuments.
-- [ ] minEvidence.
-- [ ] maxEvidence.
-- [ ] status.
-- [ ] version.
+- [x] type. (free text, content-defined)
+- [x] difficulty. (free text, content-defined)
+- [x] minCharacters.
+- [x] maxCharacters.
+- [x] minItems.
+- [x] maxItems.
+- [x] minDocuments.
+- [x] maxDocuments.
+- [x] minEvidence.
+- [x] maxEvidence.
+- [x] status.
+- [x] version.
 
 ---
 

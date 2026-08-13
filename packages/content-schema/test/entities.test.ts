@@ -158,9 +158,86 @@ describe('content entity schemas', () => {
     expect(ch.text).toBe('Hello.');
   });
 
-  it('parses a valid case anchor', () => {
-    const c = caseSchema.parse({ ...base, title: 'Smuggling ring', description: null });
-    expect(c.title).toBe('Smuggling ring');
+  it('parses a valid case template with bounds config', () => {
+    const c = caseSchema.parse({
+      ...base,
+      title: 'Suspicious Suitcase',
+      description: null,
+      type: 'smuggling',
+      difficulty: 'medium',
+      minCharacters: 2,
+      maxCharacters: 4,
+      minItems: 3,
+      maxItems: 7,
+      minDocuments: 1,
+      maxDocuments: 4,
+      minEvidence: 1,
+      maxEvidence: 3,
+    });
+    expect(c.title).toBe('Suspicious Suitcase');
+    expect(c.type).toBe('smuggling');
+    expect(c.difficulty).toBe('medium');
+    expect(c.minCharacters).toBe(2);
+    expect(c.maxEvidence).toBe(3);
+  });
+
+  it('parses a case template with zero bounds (no bound)', () => {
+    const c = caseSchema.parse({
+      ...base,
+      title: 'Minimal',
+      description: null,
+      type: null,
+      difficulty: null,
+      minCharacters: 0,
+      maxCharacters: 0,
+      minItems: 0,
+      maxItems: 0,
+      minDocuments: 0,
+      maxDocuments: 0,
+      minEvidence: 0,
+      maxEvidence: 0,
+    });
+    expect(c.maxCharacters).toBe(0);
+  });
+
+  it('rejects a case template with a negative min/max bound', () => {
+    expect(() =>
+      caseSchema.parse({
+        ...base,
+        title: 'Bad',
+        description: null,
+        type: null,
+        difficulty: null,
+        minCharacters: -1,
+        maxCharacters: 4,
+        minItems: 0,
+        maxItems: 0,
+        minDocuments: 0,
+        maxDocuments: 0,
+        minEvidence: 0,
+        maxEvidence: 0,
+      }),
+    ).toThrow();
+  });
+
+  it('rejects a case template without a title', () => {
+    expect(() =>
+      caseSchema.parse({
+        ...base,
+        title: '',
+        description: null,
+        type: null,
+        difficulty: null,
+        minCharacters: 0,
+        maxCharacters: 0,
+        minItems: 0,
+        maxItems: 0,
+        minDocuments: 0,
+        maxDocuments: 0,
+        minEvidence: 0,
+        maxEvidence: 0,
+      }),
+    ).toThrow();
   });
 
   it('parses a valid case_character relation', () => {
