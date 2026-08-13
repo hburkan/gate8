@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+build
+package-lock.json
+coverage
+*.log
+backend/supabase/.temp
+backend/supabase/.branches
+backend/supabase/.status
+apps/mobile/.dart_tool
+apps/mobile/build

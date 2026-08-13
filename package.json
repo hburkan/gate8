@@ -1,0 +1,35 @@
+{
+  "name": "gate8",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gümrük Kontrol Memuru — data-driven customs inspection game. Monorepo.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm run dev --workspace @gate8/admin",
+    "build:admin": "npm run build --workspace @gate8/admin",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@11.12.1",
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.67.0"
+  }
+}
