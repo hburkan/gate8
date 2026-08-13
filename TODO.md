@@ -342,6 +342,17 @@ Example:
 
 # PHASE 7 — CHARACTER ITEM GENERATION
 
+> **Note (approved Phase 7 implementation):** The approved Phase 7 item-generation
+> work implements **GLOBAL CASE ITEM GENERATION** — the deterministic generation
+> of a Case Template's complete item set from the canonical `case_items` relation
+> and `cases.min_items`/`max_items`, implemented in `packages/game-rules`
+> (`selectItems`). `case_items` remains the canonical relation/pool; **no
+> `case_item_pool` table is required**. This section (Character Item Generation /
+> per-character assignment) remains **deferred** to a later phase, and TODO
+> Phase 8 (Case Item Pool) remains a separate, deferred checklist — it is **not**
+> marked complete solely because `case_items` already satisfies the architectural
+> requirement.
+
 Each character may have different item limits.
 
 Example:
