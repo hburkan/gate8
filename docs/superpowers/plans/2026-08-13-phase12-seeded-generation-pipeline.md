@@ -1,6 +1,6 @@
 # Phase 12 — Seeded Generation Pipeline Design
 
-> **Status:** DESIGN — for review (design-only; nothing implemented, migrated, or committed). This document specifies the deterministic seeded Case Generation Pipeline that composes the Phase 6–10 generators (`selectCharacters`, `selectItems`, `selectDocuments`, `selectEvidence`) and the Phase 11 rule engine into one reproducible `generateCase(snapshot, seed)` operation. No database, migration, shared-types, content-schema, game-rules implementation, Admin, or Mobile change is made by this document.
+> **Status:** IMPLEMENTED — Phase 12 seeded generation pipeline implemented per this design in `packages/game-rules` (`src/generation/pipeline*.ts`), verified (1273 tests), and committed. No database, migration, shared-types, content-schema, Admin, or Mobile change is made by this document.
 
 **Goal:** Design one pure, deterministic, typed, atomic pipeline that turns a version-pinned content snapshot plus a seed into a complete generated case (characters, items, documents, evidence), with a precisely specified seed namespace, validation order, failure behavior, and extensibility path — while preserving the Phase 6–10 draw contracts byte-for-byte.
 

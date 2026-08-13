@@ -1,7 +1,7 @@
 {
   "name": "@gate8/game-rules",
   "version": "0.1.0",
-  "description": "Rule / condition engine: AST, parser, contexts, and evaluator.",
+  "description": "Rule / condition engine (AST, parser, contexts, evaluator) and the seeded case generation pipeline (deterministic per-step generators composed over version-pinned content snapshots).",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

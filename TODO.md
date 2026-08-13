@@ -511,70 +511,85 @@ Examples:
 
 # PHASE 12 — RANDOM GENERATION ENGINE
 
+> **Note (approved Phase 12 implementation):** The approved Phase 12 seeded-generation
+> pipeline implements the **composition layer** — the Phase 6–10 generators
+> (`selectCharacters`/`selectItems`/`selectDocuments`/`selectEvidence`) driven by the
+> Phase 11 rule engine as one deterministic `generateCase(snapshot, seed)` operation in
+> `packages/game-rules` (`src/generation/pipeline*.ts`). Each step gets a
+> domain-separated derived seed (Decision D1), a fresh per-step `GenerationContext`
+> (current class = candidate pool, earlier = settled output), and a class-A-only
+> `eligibilityFilter`; Phase 1 fails fast (template bounds, cross-pool version pinning,
+> duplicate detection, condition parsing) before any PRNG exists. Generation is atomic
+> (complete `GeneratedCase` or typed error) and the seed derivation is frozen as a
+> versioned contract (`pipelineAlgorithmVersion`). The bullets below mark **only** the
+> satisfied items; seed lifecycle (12.1), retry/save (12.2), per-character pools and
+> location restrictions (12.3), character-linked documents (12.4), and evidence from
+> discovered content (12.5) remain **deferred** to Phases 13/14/36.
+
 This is a core gameplay system.
 
 ---
 
 ## 12.1 Seed
 
-- [ ] Generate seed when Case Instance starts.
-- [ ] Store seed.
-- [ ] Use deterministic random generator.
-- [ ] Same seed must generate same result.
-- [ ] Never regenerate an active case unintentionally.
+- [ ] Generate seed when Case Instance starts. _(Phase 14 — instance lifecycle; `GeneratedCase.seed` is the stored payload)_
+- [ ] Store seed. _(Phase 14 — stored on the Case Instance beside `pipelineAlgorithmVersion`)_
+- [x] Use deterministic random generator. _(Phases 6–10 + Phase 12 `generateCase`; golden determinism pinned)_
+- [x] Same seed must generate same result. _(Phase 12 determinism contract + tests; `pipelineAlgorithmVersion` freezes the derivation)_
+- [ ] Never regenerate an active case unintentionally. _(Phase 14 — instance lifecycle)_
 
 ---
 
 ## 12.2 Character Generation
 
-Algorithm:
+Algorithm (Phase 12 satisfies steps 1–8; steps 9–10 are deferred):
 
-1. Load Case Template.
-2. Read min/max character count.
-3. Select required characters.
-4. Build character pool.
-5. Remove invalid characters.
-6. Apply weights.
-7. Select random characters.
-8. Validate constraints.
-9. Retry if invalid.
-10. Save generated result.
+- [x] Load Case Template. _(Phase 12: immutable, fully-loaded version-pinned `CaseTemplateSnapshot`)_
+- [x] Read min/max character count.
+- [x] Select required characters.
+- [x] Build character pool.
+- [x] Remove invalid characters. _(Phase 12: class-A eligibility via per-step context + `eligibilityFilter`, zero PRNG draws)_
+- [x] Apply weights.
+- [x] Select random characters. _(Phase 6 `selectCharacters` + domain-separated derived seed)_
+- [x] Validate constraints. _(Phase 1 validation + deterministic generator errors)_
+- [ ] Retry if invalid. _(Phase 13 — seed-only retry; `generateCase` is pure and re-callable)_
+- [ ] Save generated result. _(Phase 14 — Case Instance persistence)_
 
 ---
 
 ## 12.3 Item Generation
 
-For each character:
+Case-level generation (Phase 12 calls `selectItems` in step order; per-character pools and location restrictions remain deferred):
 
-1. Read min/max item count.
-2. Load character item pool.
-3. Load case item restrictions.
-4. Load location restrictions.
-5. Apply required items.
-6. Apply weighted random.
-7. Generate quantity.
-8. Validate constraints.
+- [x] Read min/max item count.
+- [ ] Load character item pool. _(deferred — character→item assignment is future work, §15)_
+- [x] Load case item restrictions. _(Phase 7 `case_items` pool)_
+- [ ] Load location restrictions. _(deferred — location-dependent content, §15)_
+- [x] Apply required items.
+- [x] Apply weighted random.
+- [x] Generate quantity. _(Phase 7 quantity draws, unchanged)_
+- [x] Validate constraints.
 
 ---
 
 ## 12.4 Document Generation
 
-- [ ] Required documents.
-- [ ] Random optional documents.
-- [ ] Fake documents.
-- [ ] Decoys.
-- [ ] Character-linked documents.
-- [ ] Case-linked documents.
+- [x] Required documents. _(Phase 9 `role` + Phase 12 pipeline)_
+- [x] Random optional documents.
+- [x] Fake documents.
+- [x] Decoys.
+- [ ] Character-linked documents. _(deferred — document→character assignment is future work)_
+- [x] Case-linked documents. _(Phase 9 `case_documents` pool)_
 
 ---
 
 ## 12.5 Evidence Generation
 
-- [ ] Required evidence.
-- [ ] Optional evidence.
-- [ ] Decoy evidence.
-- [ ] Conditional evidence.
-- [ ] Evidence generated from discovered content.
+- [x] Required evidence. _(Phase 10 `role`)_
+- [x] Optional evidence.
+- [x] Decoy evidence.
+- [x] Conditional evidence. _(Phase 11 + Phase 12 class-A eligibility via the evidence map)_
+- [ ] Evidence generated from discovered content. _(runtime — discovery is class B; Phase 14/36)_
 
 ---
 

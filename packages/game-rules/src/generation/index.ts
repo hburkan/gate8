@@ -12,3 +12,6 @@ export * from './document-selection.js';
 export * from './evidence-errors.js';
 export * from './evidence-types.js';
 export * from './evidence-selection.js';
+export * from './pipeline-types.js';
+export * from './pipeline-errors.js';
+export * from './pipeline.js';
