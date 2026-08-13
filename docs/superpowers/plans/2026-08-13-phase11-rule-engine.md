@@ -1,6 +1,6 @@
 # Phase 11 — Rule / Condition Engine Design
 
-> **Status:** DESIGN — for review (design-only; nothing implemented or migrated). This document specifies the generic rule system (TODO §11) and the module/API boundary: the shared rule AST, the pure evaluation core, the four condition classes, the context model, and the eligibility-filter wiring into the Phase 6–10 generators. No database, migration, shared-types, content-schema, Admin UI, or Mobile UI changes are made by this document.
+> **Status:** IMPLEMENTED — Phase 11 build step complete. Parser/contexts/evaluator, the four class-specific entry points, nominally-branded contexts, the closed-path vocabulary, and generation-eligibility wiring through the Phase 6–10 `eligibilityFilter` hooks are implemented in `packages/game-rules/src/rules/` (111 tests). The content-schema build step upgraded `relationConditionsSchema` / `rulePayloadSchema` / mission `completionCondition` / discovery conditions to a strict zod mirror of the `Rule` union (38 tests). No migration was required; `supabase db reset` (0001–0016) stays clean. Phase 12/14 wire the entry points into the seeded pipeline and Case Instance.
 
 **Goal:** Design a generic, data-driven condition/rule system covering the four distinct condition classes the schema already carries — generation eligibility, discovery, availability, and runtime/gameplay — over a single shared rule AST, without creating pool tables, without new sources of truth, without new SQL enums (R4), and without changing the Phase 6–10 deterministic output contract.
 

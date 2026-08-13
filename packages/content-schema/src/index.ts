@@ -1,5 +1,6 @@
 export * from './base.js';
 export * from './relations.js';
+export * from './rules.js';
 export * from './entities/character.js';
 export * from './entities/item.js';
 export * from './entities/document.js';

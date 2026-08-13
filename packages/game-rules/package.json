@@ -1,7 +1,7 @@
 {
   "name": "@gate8/game-rules",
   "version": "0.1.0",
-  "description": "Rule / condition engine types and evaluation primitives. Rule engine ships in Phase 11.",
+  "description": "Rule / condition engine: AST, parser, contexts, and evaluator.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

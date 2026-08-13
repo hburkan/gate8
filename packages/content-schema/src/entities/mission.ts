@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { contentBaseSchema } from '../base.js';
+import { completionConditionSchema } from '../rules.js';
 
 export const missionSchema = contentBaseSchema.extend({
   title: z.string().min(1).max(200),
   description: z.string().nullable(),
   objective: z.string().nullable(),
   reward: z.record(z.string(), z.unknown()),
-  completionCondition: z.record(z.string(), z.unknown()),
+  completionCondition: completionConditionSchema,
 });
 
 export const missionDraftSchema = missionSchema.partial().omit({

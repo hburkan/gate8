@@ -472,7 +472,7 @@ Types:
 
 ---
 
-# PHASE 11 — CONDITION / RULE ENGINE
+# PHASE 11 — CONDITION / RULE ENGINE ✅
 
 Create generic rule system.
 
@@ -491,21 +491,21 @@ Examples:
 
 ---
 
-## 11.1 Rule Types
+## 11.1 Rule Types ✅
 
-- [ ] AND.
-- [ ] OR.
-- [ ] NOT.
-- [ ] equals.
-- [ ] greaterThan.
-- [ ] lessThan.
-- [ ] contains.
-- [ ] hasItem.
-- [ ] hasEvidence.
-- [ ] characterRole.
-- [ ] locationType.
-- [ ] difficulty.
-- [ ] previousDecision.
+- [x] AND.
+- [x] OR.
+- [x] NOT.
+- [x] equals.
+- [x] greaterThan.
+- [x] lessThan.
+- [x] contains.
+- [x] hasItem.
+- [x] hasEvidence.
+- [x] characterRole.
+- [x] locationType.
+- [x] difficulty.
+- [x] previousDecision.
 
 ---
 

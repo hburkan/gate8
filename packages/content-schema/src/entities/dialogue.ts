@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { contentBaseSchema } from '../base.js';
+import { rulePayloadSchema } from '../rules.js';
 
 export const dialogueNodeTypeSchema = z.enum([
   'dialogue',
@@ -12,11 +13,10 @@ export const dialogueNodeTypeSchema = z.enum([
 ]);
 
 /**
- * Condition/action payloads are validated against the rule shapes from
- * @gate8/game-rules once the rule engine ships (Phase 11). Until then they
- * are structurally validated as arrays of records.
+ * Condition/action payloads validated against the rule shapes (Phase 11):
+ * either carrier form — single rule object or array of rules (implicit AND).
  */
-export const rulePayloadSchema = z.array(z.record(z.string(), z.unknown()));
+export { rulePayloadSchema };
 
 export const dialogueDefinitionSchema = contentBaseSchema.extend({
   title: z.string().min(1).max(200),

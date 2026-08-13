@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { rulePayloadSchema, discoveryConditionSchema } from './rules.js';
 
 /**
  * Server-generated columns shared by every relation table (Phase 3).
@@ -12,8 +13,8 @@ export const relationBaseSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-/** Condition payloads are validated by the rule engine in Phase 11. */
-export const relationConditionsSchema = z.array(z.record(z.string(), z.unknown()));
+/** Condition payloads validated against the rule shapes (Phase 11). */
+export const relationConditionsSchema = rulePayloadSchema;
 
 /** 0..1 spawn probability (location relations). */
 export const spawnProbabilitySchema = z.number().min(0).max(1);
@@ -62,7 +63,7 @@ export const caseEvidenceSchema = relationBaseSchema.extend({
   weight: z.number().nonnegative(),
   importance: z.string().nullable(),
   discoveryMethod: z.string().nullable(),
-  discoveryCondition: z.record(z.string(), z.unknown()).nullable(),
+  discoveryCondition: discoveryConditionSchema,
   conditions: relationConditionsSchema,
   priority: z.number().int(),
 });
@@ -119,7 +120,7 @@ export const locationEvidenceSchema = relationBaseSchema.extend({
   role: z.string().nullable(),
   importance: z.string().nullable(),
   discoveryMethod: z.string().nullable(),
-  discoveryCondition: z.record(z.string(), z.unknown()).nullable(),
+  discoveryCondition: discoveryConditionSchema,
   priority: z.number().int(),
   sortOrder: z.number().int(),
   conditions: relationConditionsSchema,
