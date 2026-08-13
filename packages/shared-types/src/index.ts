@@ -10,3 +10,4 @@ export * from './entities/case.js';
 export * from './entities/chapter.js';
 export * from './entities/dialogue.js';
 export * from './entities/mission.js';
+export * from './entities/case-instance.js';

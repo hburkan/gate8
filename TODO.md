@@ -632,18 +632,18 @@ Case Instance:
 
 Case Instance stores:
 
-- [ ] caseTemplateId.
-- [ ] playerId.
-- [ ] seed.
-- [ ] generatedCharacters.
-- [ ] generatedItems.
-- [ ] generatedDocuments.
-- [ ] generatedEvidence.
-- [ ] generatedDialogue state.
-- [ ] decisions.
-- [ ] status.
-- [ ] startedAt.
-- [ ] completedAt.
+- [x] caseTemplateId. _(reproduction-key column, migration `0017`; FK → `cases.id` ON DELETE RESTRICT, Phase 14 §16)_
+- [ ] playerId. _(deferred: no player model exists; Phase 38 adds the owner FK + ownership RLS, Phase 14 §6/§38)_
+- [x] seed. _(canonical 32-hex reproduction key; DB CHECK + `isValidSeed` at the storage boundary, Phase 13 D8 / Phase 14 §12)_
+- [x] generatedCharacters. _(inside the immutable `generated_snapshot` JSONB — the `GeneratedCase` payload, Phase 14 §25)_
+- [x] generatedItems. _(same `generated_snapshot` payload)_
+- [x] generatedDocuments. _(same `generated_snapshot` payload)_
+- [x] generatedEvidence. _(same `generated_snapshot` payload)_
+- [ ] generatedDialogue state. _(deferred: Phase 36/37 Case Engine, Phase 39 save; never mutates `generated_snapshot`)_
+- [ ] decisions. _(deferred: Phase 37/38/39 runtime/player data)_
+- [x] status. _(`instance_status` enum: generated/active/completed/abandoned; DB-pinned lifecycle, Phase 14 §19)_
+- [x] startedAt. _(lifecycle invariant: set ⟺ status ≠ generated; DB CHECK, Phase 14 §15/§19)_
+- [x] completedAt. _(lifecycle invariant: set ⟺ status = completed; DB CHECK, Phase 14 §15/§19)_
 
 ---
 

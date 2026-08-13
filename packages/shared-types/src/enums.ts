@@ -54,3 +54,12 @@ export type EvidenceRole = (typeof EVIDENCE_ROLES)[number];
 /** Roles for documents within a case. DB column is free text (R4). */
 export const DOCUMENT_ROLES = ['real', 'fake', 'decoy'] as const;
 export type DocumentRole = (typeof DOCUMENT_ROLES)[number];
+
+/**
+ * Lifecycle states of a Case Instance (Phase 14 `case_instances.status`,
+ * `instance_status` enum). The four states map 1:1 to the DB-pinned state
+ * machine `generated → active → completed | abandoned`; a failed generation
+ * never becomes a row, and `archived` is a deferred admin lifecycle.
+ */
+export const INSTANCE_STATUSES = ['generated', 'active', 'completed', 'abandoned'] as const;
+export type InstanceStatus = (typeof INSTANCE_STATUSES)[number];

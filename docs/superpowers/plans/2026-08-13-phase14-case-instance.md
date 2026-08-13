@@ -1,6 +1,6 @@
 # Phase 14 — Case Instance / Runtime Persistence Model
 
-> **Status:** DESIGN — for review (design-only; nothing implemented, migrated, or committed). This document specifies the Case Instance model: the persistent, playable runtime record produced from a Phase 12 `GeneratedCase` and a Phase 13 seed. It fixes the table, the identity/version/seed columns, the hybrid snapshot strategy (canonical generation identity + persisted generated snapshot), the CREATE-time-vs-load verification gate, the lifecycle state machine, retry/idempotency semantics, RLS, and the game-rules ↔ runtime boundary. No database, migration, shared-types, content-schema, game-rules, Admin, or Mobile change is made by this document.
+> **Status:** IMPLEMENTED (migration `0017`, shared-types `InstanceStatus`/`CaseInstance`, new `packages/runtime` orchestrator, TODO Phase 14 updated; committed to `main`). This document specifies the Case Instance model: the persistent, playable runtime record produced from a Phase 12 `GeneratedCase` and a Phase 13 seed. It fixes the table, the identity/version/seed columns, the hybrid snapshot strategy (canonical generation identity + persisted generated snapshot), the CREATE-time-vs-load verification gate, the lifecycle state machine, retry/idempotency semantics, RLS, and the game-rules ↔ runtime boundary.
 
 **Goal:** Convert a pure generated `GeneratedCase` into a durable, replayable, auditable "Suspicious Luggage #829183" row — the explicit architectural boundary between CASE TEMPLATE (content) and CASE INSTANCE (runtime).
 
@@ -89,7 +89,7 @@ The design must fix the template-vs-instance boundary, choose ONE snapshot strat
   - TODO Phase 38 ("Separate player data from content. Player: User, Profile, Level, …, Case progress, Generated case instances") is the phase that introduces the players table and the ownership link.
   - Adding a nullable `player_id` FK to a table that does not exist is a schema error; adding it without an FK invites the exact "invent an auth system" fragmentation the objective forbids.
   - Phase 38 will ship the additive `alter table case_instances add column player_id uuid` (and the ownership RLS policy). Everything Phase 14 builds is ownership-agnostic — instances are service-created records whose lifecycle is player-free until then.
-- **Implication for idempotency:** "same player+template" duplicate prevention (Phase 13 §8) cannot be enforced before a player identity exists; the Phase 14 idempotency story is therefore PK-only + the reproduction determinism (§14).
+- **Implication for idempotency:** "same player+template" duplicate prevention (Phase 13 §8) cannot be enforced before a player identity exists; the Phase 14 idempotency story is therefore PK-only (row-identity collisions, not request deduplication) — see §14, which separates this from reproduction determinism.
 
 ---
 
@@ -161,7 +161,7 @@ Nothing in Phase 14Timestamped defers these: no speculative column, JSON blobs, 
 - **Published version:** publishing sets `status = 'published'` (Phase 26 validates first). Creation is a runtime policy: **only a PUBLISHED template may be instantiated** (§21). This is enforced at the orchestrator (Phase 36), not as a DB constraint — matching how `min <= max` and other content invariants are publish-time checks (§0016 comment; Phase 26).
 - **Archived template / archived entities:** `status = 'archived'` is a soft-delete (archive, never hard-delete — global entity FKs are RESTRICT). A previously generated instance still loads from its snapshot and still resolves entity display data from the global rows (which still exist). Regeneration's audit path reports content-version-change (template updated further or relations changed) — a log line, not a failure.
 - **Algorithm version change:** new instances use the new `pipeline_algorithm_version`; stored instances keep theirs and are never silently re-generated (§12). A version registry is explicitly NOT built until an actual v2 exists (Phase 14/36 plan per Phase 13 §7).
-- **Deletion:** `case_instances.case_template_id` FK is RESTRICT → a template with instances cannot be hard-deleted (same policy as global-entity references).
+- **Deletion:** `case_instances.case_template_id` FK is RESTRICT → a template with instances cannot be hard-deleted. Note this is a **deliberate runtime-parent decision** (the instance must survive template edits; archive is the soft-delete path), not the content-relation rule — 0012/0013 CASCADE parent references and RESTRICT only entity references (§16).
 
 ---
 
@@ -191,11 +191,13 @@ Decisions:
 
 ## 14. Idempotency / Duplicate Prevention
 
+**Two distinct concepts must not be conflated.** Phase 13's determinism is a **reproduction** property; Phase 14 needs a **write-idempotency** story too. They solve different problems:
+
 - **No DB uniqueness on the generation tuple.** `UNIQUE(case_template_id, seed, pipeline_algorithm_version)` is rejected: two legitimate instances may share it (two players; a "same case for everyone" authoring experiment; re-rolling during content validation). The objective's warning "do not make one seed unusable for two legitimate players/instances" is honored by omitting it.
-- **PK uniqueness is the only SQL-level guarantee** (each instance is a distinct `id`).
-- **Idempotent-by-construction property carried from Phase 13:** regenerating from the stored key produces a deep-equal `GeneratedCase` (when content@version is still loadable) — so re-running creation logic never invents a _different_ case; `INSERT` is the only state-changing op and it's single-row atomic.
+- **Write idempotency — PK uniqueness is the only SQL-level guarantee.** Each instance is a distinct `id`; the PK prevents primary-key _collisions_. It does **NOT** prevent duplicate-row _creation_: two separate CREATE requests with an identical `(case_template_id, template_version, seed, pipeline_algorithm_version)` tuple each succeed and produce **two separate rows** (both with their own `id`). PK-only idempotency guarantees row identity, not request deduplication.
+- **Request-idempotent creation is genuinely deferred to Phase 36.** With no API layer and no server-only creation path yet, an `idempotency_key` column would be speculative. Phase 36's creation API will introduce request keys / client deduplication (`client_request_id` semantics) — the mechanism that turns "same request sent twice" into "one row, one response." Phase 14 explicitly does **not** build this; it is called out here so the deferral is a decision, not an omission.
+- **Reproduction determinism (Phase 13 §6) is a _separate_ property, and it is NOT write idempotency.** It says: given the same `(content snapshot at templateVersion, templateVersion, seed, PIPELINE_ALGORITHM_VERSION, pipeline order)`, regeneration yields a **deep-equal `GeneratedCase`** — so re-running generation never invents _different_ content, and an audit can prove a stored snapshot is genuine. It says nothing about how many _rows_ an identical request creates. Do not describe determinism as "idempotent-by-construction" for row purposes.
 - **Active-instance guard & player-scoped "at most one active per player+template"** need a player identity → **deferred to Phase 38** (owner_id + partial UNIQUE among active rows, or a status guard). Documented here, not built (Phase 13 §8 names exactly this).
-- **Request/generation idempotency keys:** with no API layer yet and server-only creation not yet existing (Phase 36/40), an `idempotency_key` column would be speculative. **Deferred to the Phase 36 creation API**, which will expose `client_request_id` semantics if PostgREST/Edge needs them.
 
 ---
 
@@ -215,8 +217,14 @@ Migration **`0017_case_instances.sql`** (single migration, one concern):
 --
 -- Convention alignment (Migration Strategy §rules): uuid PK, timestamps,
 -- set_updated_at() trigger, RLS enabled with no policies yet (0010/0012
--- pattern); entity-style FK uses RESTRICT because deleting a template with
--- live instances is a soft-delete (archive) concern.
+-- pattern).
+-- The case_instances -> cases FK deliberately uses ON DELETE RESTRICT. This is
+-- a runtime-parent reference decision, NOT inherited from the 0012/0013
+-- convention (those use CASCADE for child-of-template references and RESTRICT
+-- only for global-entity references). Rationale: a template with live runtime
+-- instances must never be hard-deleted and silently orphan those instances;
+-- archive (status = 'archived') is the intended soft-delete lifecycle for a
+-- template that has or may have instances. See §16 for the full reasoning.
 -- Ownership (player_id) is deliberately absent: no player model exists
 -- (Phase 38 adds it additively). No *_pool duplicate tables are created.
 
@@ -241,8 +249,14 @@ create table case_instances (
   completed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (completed_at is null or status = 'completed'),
-  check (started_at is null or status in ('active', 'completed', 'abandoned'))
+  -- Invariant 1: generated <-> started_at IS NULL
+  --   (every non-generated state requires started_at; started_at set forbids generated)
+  check (status = 'generated' or started_at is not null),
+  check (started_at is null or status in ('active', 'completed', 'abandoned')),
+  -- Invariant 2: completed <-> completed_at IS NOT NULL
+  --   (completed requires completed_at; a set completed_at requires completed)
+  check (status <> 'completed' or completed_at is not null),
+  check (completed_at is null or status = 'completed')
 );
 
 create index case_instances_case_template_id_idx on case_instances (case_template_id);
@@ -255,17 +269,20 @@ create trigger case_instances_set_updated_at
 alter table case_instances enable row level security;
 ```
 
-- **Status/timestamp CHECK constraints** enforce the state machine at the DB (a completed instance must have `completed_at`; `started_at` implies a marching status) — a cheap integrity guard, not a content constraint.
+- **Status/timestamp CHECK constraints** enforce the state machine at the DB, exactly mirroring §19:
+  - **Invariant 1 (started_at):** `generated` ⟺ `started_at IS NULL`. Every non-`generated` state (`active`/`completed`/`abandoned`) requires `started_at IS NOT NULL`, and `started_at` set forbids `generated`.
+  - **Invariant 2 (completed_at):** `completed` ⟺ `completed_at IS NOT NULL`. `completed` requires `completed_at`; a set `completed_at` requires `completed` (so `active`/`abandoned`/`generated` can never carry `completed_at`).
+  - The transitions `generated → active → completed | abandoned` are therefore the only rows the DB permits. These are cheap integrity guards, not content constraints.
 - **No new global entity or relation table is touched.**
 
 ---
 
 ## 16. FK / Delete Strategy
 
-| FK                   | Referenced   | ON DELETE                                                             | Rationale (matches 0012/0013 convention)                                                                            |
-| -------------------- | ------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `case_template_id`   | `cases.id`   | **RESTRICT**                                                          | A template with live instances must not be hard-deleted; archive is the soft-delete path (same rule as entity FKs). |
-| (future) `player_id` | `players.id` | (Phase 38, additive; likely `SET NULL` or `RESTRICT` — decided there) | —                                                                                                                   |
+| FK                   | Referenced   | ON DELETE                                                             | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | ------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `case_template_id`   | `cases.id`   | **RESTRICT**                                                          | **Deliberate runtime-parent reference decision** (NOT inherited from the 0012/0013 convention, which CASCADEs child-of-template references and RESTRICTs only global-entity references). A template with live runtime instances must not be hard-deleted and silently orphan them; archive (`status = 'archived'`) is the intended soft-delete lifecycle (§11). The instance is runtime data, not a content relation — it must survive template edits and only be removed by an explicit lifecycle decision, never by cascade. |
+| (future) `player_id` | `players.id` | (Phase 38, additive; likely `SET NULL` or `RESTRICT` — decided there) | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 - No FKs from the snapshot to global entities (snapshot is self-describing instance data; avoids drift).
 
@@ -307,10 +324,11 @@ alter table case_instances enable row level security;
            completed_at = now    (completed_at stays null)
 ```
 
-- **`generated`** — the row was created from a `validateGeneratedCase`-clean `GeneratedCase`; not yet entered by a player.
-- **`active`** — loaded by the Case Engine (Phase 36), `started_at` set.
-- **`completed`** — finished; `completed_at` set (Phase 37/39/42 analytics read this).
-- **`abandoned`** — discarded without completion (Phase 37/42).
+- **`generated`** — the row was created from a `validateGeneratedCase`-clean `GeneratedCase`; not yet entered by a player. `started_at IS NULL`, `completed_at IS NULL`.
+- **`active`** — loaded by the Case Engine (Phase 36), `started_at` set, `completed_at IS NULL`.
+- **`completed`** — finished; `started_at` and `completed_at` both set (Phase 37/39/42 analytics read this).
+- **`abandoned`** — discarded without completion; `started_at` set, `completed_at IS NULL` (Phase 37/42).
+- **DB-pinned invariants (with §15 CHECKs):** `generated` ⟺ `started_at IS NULL`; `completed` ⟺ `completed_at IS NOT NULL`; every non-`generated` state requires `started_at`. A row can never be `active`/`completed`/`abandoned` without a start, and never `completed` without an end.
 - **Rejected states:** `failed` is NOT a status (a failed generation writes no row — §13); `archived` is deferred (admin lifecycle; no Phase-14 consumer). The four states map 1:1 to roads the TODO/roadmap already names (Phase 14 `status/startedAt/completedAt`; Phase 42 started/completed/abandoned; Phase 39 completion status).
 
 ---
@@ -330,19 +348,19 @@ alter table case_instances enable row level security;
 
 Typed, application-level failures for Phase 14 CREATE/LOAD operations (mirroring the repo's union style; only what this phase needs):
 
-| Code                   | Meaning                                                                              | Raised when                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `TemplateNotFound`     | `case_template_id` does not exist or `template_version` mismatches current           | CREATION: loader cannot source a `CaseTemplateSnapshot` (or version pin fails) |
-| `TemplateNotPublished` | template `status != 'published'`                                                     | CREATION: orchestrator policy (§11)                                            |
-| `InvalidSeed`          | `!isValidSeed(seed)`                                                                 | CREATION: storage-boundary format check (D8)                                   |
-| `GenerationFailed`     | `generateCase` returned `ok:false` (typed `GenerationPipelineError` kept in `cause`) | CREATION: every `generateCase` call before INSERT                              |
-| `ValidationFailed`     | `validateGeneratedCase` returned a non-empty `GeneratedCaseIssue[]`                  | CREATION: gate between generation and INSERT (must be `[]`; §27 test)          |
-| `SnapshotParseError`   | `generated_snapshot` fails structural/typed parse on load                            | LOAD: JSON corrupt or schema-mismatched (§25/§27)                              |
-| `IdentityMismatch`     | snapshot identity fields ≠ column values                                             | LOAD: defensive consistency check                                              |
-| `PersistenceError`     | INSERT/UPDATE rejected by DB (constraint, trigger, connectivity)                     | CREATION/LOAD/status transitions                                               |
-| `StateTransitionError` | invalid status transition (e.g. completed → active; §19 CHECK also guards)           | UPDATE: orchestrator pre-checks                                                |
+| Code                   | Meaning                                                                              | Raised when                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TemplateNotFound`     | `case_template_id` does not exist or `template_version` mismatches current           | CREATION: loader cannot source a `CaseTemplateSnapshot` (or version pin fails)                                                                                                                    |
+| `TemplateNotPublished` | template `status != 'published'`                                                     | **FUTURE (Phase 36 orchestrator) contract only** — not raiseable by Phase 14: no creation API/policy exists today. Documented here as the published-only gate the Case Engine (§11) will enforce. |
+| `InvalidSeed`          | `!isValidSeed(seed)`                                                                 | CREATION: storage-boundary format check (D8)                                                                                                                                                      |
+| `GenerationFailed`     | `generateCase` returned `ok:false` (typed `GenerationPipelineError` kept in `cause`) | CREATION: every `generateCase` call before INSERT                                                                                                                                                 |
+| `ValidationFailed`     | `validateGeneratedCase` returned a non-empty `GeneratedCaseIssue[]`                  | CREATION: gate between generation and INSERT (must be `[]`; §27 test)                                                                                                                             |
+| `SnapshotParseError`   | `generated_snapshot` fails structural/typed parse on load                            | LOAD: JSON corrupt or schema-mismatched (§25/§27)                                                                                                                                                 |
+| `IdentityMismatch`     | snapshot identity fields ≠ column values                                             | LOAD: defensive consistency check                                                                                                                                                                 |
+| `PersistenceError`     | INSERT/UPDATE rejected by DB (constraint, trigger, connectivity)                     | CREATION/LOAD/status transitions                                                                                                                                                                  |
+| `StateTransitionError` | invalid status transition (e.g. completed → active; §19 CHECK also guards)           | UPDATE: orchestrator pre-checks                                                                                                                                                                   |
 
-These reuse the pipeline/validation error unions (never re-encode them). No speculative "not enough content", "ai failed", etc.
+These reuse the pipeline/validation error unions (never re-encode them). No speculative "not enough content", "ai failed", etc. `TemplateNotPublished` and `StateTransitionError` are Phase-36 orchestrator contracts made visible here so the union is forward-complete; Phase 14's own code can raise the remaining codes.
 
 ---
 
@@ -356,14 +374,22 @@ export const INSTANCE_STATUSES = ['generated', 'active', 'completed', 'abandoned
 export type InstanceStatus = (typeof INSTANCE_STATUSES)[number];
 
 // src/entities/case-instance.ts (new)
-import type { GeneratedCase } from '@gate8/game-rules/dist/index.js'; // or via exported pipeline type
+//
+// NOTE: shared-types must NOT import from game-rules. game-rules already
+// depends on @gate8/shared-types (its only dependency); importing
+// `GeneratedCase` back into shared-types would create a workspace dependency
+// cycle (shared-types → game-rules → shared-types). shared-types stays a
+// leaf-level DB-mirror package. `generatedSnapshot` is therefore typed as
+// `unknown` — a JSON-opaque mirror of the DB jsonb column. The typed
+// `GeneratedCase` parse/refinement lives in the runtime layer (§23/§24),
+// which is allowed to depend on both shared-types and game-rules.
 export interface CaseInstance {
   id: string;
   caseTemplateId: string;
   templateVersion: number;
   pipelineAlgorithmVersion: number;
   seed: string; // 32 lowercase hex
-  generatedSnapshot: unknown; // refined to GeneratedCase (§25)
+  generatedSnapshot: unknown; // JSON-opaque DB mirror; the typed GeneratedCase parse lives in the runtime layer (§23/§24)
   status: InstanceStatus;
   generationAttempts: number;
   lastGenerationError: string | null;
@@ -374,8 +400,8 @@ export interface CaseInstance {
 }
 ```
 
-- Types mirror the DB column-for-column (shared-types strategy rule 1). `generatedSnapshot` is typed as the serialized `GeneratedCase` (re-exported from game-rules) rather than re-implemented — no drift.
-- Re-export from `src/index.ts`. No content-schema touch (§23).
+- Types mirror the DB column-for-column (shared-types strategy rule 1). `generatedSnapshot: unknown` mirrors the raw `jsonb` column without importing `GeneratedCase` — **no shared-types → game-rules dependency** (avoids the cycle; game-rules is a consumer, not a provider, of shared-types). Schema-shape drift is impossible because no shape is duplicated here: the authoritative typed shape remains `GeneratedCase` in game-rules and is consumed by the runtime layer.
+- Re-export `InstanceStatus`/`CaseInstance` from `src/index.ts`. No content-schema touch (§23).
 
 ---
 
@@ -383,6 +409,7 @@ export interface CaseInstance {
 
 - **content-schema is exclusively for CONTENT payloads** (`caseSchema`, relation schemas, rules) validated at authoring/publish (shared-types-strategy: "what makes a content object valid"). A `CaseInstance` is **runtime data, not content**.
 - **Decision: a separate runtime schema, not content-schema.** The build step adds a zod `caseInstanceSchema` (+ `generatedSnapshotSchema` = a strict mirror of `GeneratedCase`, built from the same shapes) in a **new `packages/runtime` pure package** (or, minimally, in the orchestrator module). It never enters `packages/content-schema`.
+- **Dependency direction:** `packages/runtime` depends on **both** `shared-types` (for `CaseInstance`, `InstanceStatus` row shape) and **game-rules** (for the authoritative `GeneratedCase` type). This is the only layer allowed that combination — shared-types stays a leaf (no game-rules import, §22); content-schema stays content-only. The runtime validates the parsed `generated_snapshot` against `GeneratedCase` via a strict schema and then hands the typed object to `validateGeneratedCase` if a content round-trip is ever needed.
 - The pure, DB-free shape parsing (snapshot ↔ object round-trip, structural reject) belongs to that runtime layer; `content-schema` stays a content-only validator. Nothing that validates `case_instances` lives inside game-rules (game-rules validates only the snapshot against a _snapshot_ — that's `validateGeneratedCase`).
 
 ---
@@ -400,7 +427,7 @@ export interface CaseInstance {
 | Retry policy, `max_attempts`, request keys                                 | runtime orchestrator (Phase 36)                | Phase 13 D5; §13/§14                                          |
 | Supabase/HTTP/auth/UI                                                      | runtime only                                   | game-rules has zero such imports (Phase 13 D9)                |
 
-**Contract (no DB leak into game-rules):** game-rules exports `CaseTemplateSnapshot`, `GeneratedCase`, `GenerationPipelineError`; runtime consumes them. Runtime never imports a DB lib into game-rules, and game-rules never gains a Supabase/`node:postgres` import. The loader is specified here (it must join `cases` + `case_*` relations by `version = templateVersion` + global entity metadata into the frozen `CaseTemplateSnapshot` shape) but is **not implemented** in this design phase.
+**Contract (no DB leak into game-rules):** game-rules exports `CaseTemplateSnapshot`, `GeneratedCase`, `GenerationPipelineError`; runtime consumes them. **Dependency direction is one-way:** game-rules → shared-types (existing); runtime → shared-types + game-rules (new). shared-types never imports game-rules (avoids the cycle, §22). Runtime never imports a DB lib into game-rules, and game-rules never gains a Supabase/`node:postgres` import. The loader is specified here (it must join `cases` + `case_*` relations by `version = templateVersion` + global entity metadata into the frozen `CaseTemplateSnapshot` shape) but is **not implemented** in this design phase.
 
 ---
 
@@ -558,10 +585,10 @@ export interface CaseInstance {
 - [x] **§11 template immutability/versioning** covers edit/publish/archive/algorithm-bump; no silent regeneration.
 - [x] **§12 seed integration** persists exactly the Phase 13 reproduction key; `isValidSeed` notified at storage boundary + DB CHECK.
 - [x] **§13 retry** decisions trail TODO/Phase 13 (new generation per attempt, one winner row, retry metadata columns, no policy constant).
-- [x] **§14 idempotency** rejects the seed-tuple UNIQUE and defers player-scoped guards + request keys to their phases.
-- [x] **§15–§18** full DDL with columns/types/PK/FK/ON DELETE/unique/indexes/timestamps/status/RLS/ownership, following the repo's migration conventions (additive, uuid pk, trigger, RLS pattern, RESTRICT entity FK).
-- [x] **§19 lifecycle/§20 atomicity/§21 failures** minimal and roadmap-justified; typed failure union only where needed.
-- [x] **§22–§24 shared-types (design-only), content-schema boundary, game-rules/runtime boundary** all mapped against the actual package layout.
+- [x] **§14 idempotency** rejects the seed-tuple UNIQUE, defers player-scoped guards + request keys to their phases, and **explicitly separates reproduction determinism (same tuple ⇒ same content) from write idempotency (PK-only; request deduplication deferred to Phase 36)** — the two are never conflated.
+- [x] **§15–§18** full DDL with columns/types/PK/FK/ON DELETE/unique/indexes/timestamps/status/RLS/ownership; FOLLOWS repo conventions (additive, uuid pk, trigger, RLS pattern) and deliberately **departs** from the 0012/0013 FK convention where required (RESTRICT on the runtime-parent `case_template_id` is argued as a runtime decision, not claimed to match the content-relation rule). Two DB-pinned invariants make the §19 lifecycle and the §15 CHECKs mutually consistent.
+- [x] **§19 lifecycle/§20 atomicity/§21 failures** minimal and roadmap-justified; typed failure union only where needed; `TemplateNotPublished` and `StateTransitionError` marked as Phase-36 orchestrator forward-contracts.
+- [x] **§22–§24 shared-types (design-only), content-schema boundary, game-rules/runtime boundary** all mapped against the actual package layout; **no shared-types → game-rules import** (avoids the workspace dependency cycle); `generatedSnapshot` is JSON-opaque `unknown` in shared-types and the typed `GeneratedCase` parse lives in `packages/runtime`.
 - [x] **§25 serialization** exact; JSONB justified (not a generic blob — the frozen `GeneratedCase` shape).
 - [x] **§26 migration** additive `0017`, preserves 0001–0016, `supabase db reset` clean.
 - [x] **§27 testing** covers the objective's list (creation, reproduction, template-change, algorithm change, retry, idempotency, FK, RLS, reset, serialization, invalid-snapshot rejection).
@@ -574,4 +601,4 @@ export interface CaseInstance {
 
 ## 34. Conclusion
 
-Phase 14 makes the template/instance split real and durable: **Case Template is immutable published content; Case Instance is runtime data.** One new `case_instances` table (migration `0017`) carries the reproduction identity (`case_template_id`, `template_version`, `seed`, `pipeline_algorithm_version`), the authoritative, immutable `generated_snapshot` (the Phase 12 `GeneratedCase` payload, strongly typed JSONB), and a minimal four-state lifecycle (`generated → active → completed | abandoned`) with `started_at`/`completed_at` and retry metadata. Snapshot strategy **C** is chosen because the repository has no revision history (Phase 27) — the snapshot is the runtime authority, regeneration is the audit when content@version still loads. Ownership is explicitly deferred to Phase 38's player model (no invented auth), idempotency is PK-only plus determinism (no seed-tuple unique), retry writes at most one row per instance, and every dialogue/decision/discovery/inventory/scoring/save concern is traced to its owning phase. game-rules stays a pure dependency-free library; the loader and orchestrator contracts are defined as a future pure `packages/runtime`. Implementation belongs in migration `0017`, shared-types additions, and the runtime package — gated on this document's approval, exactly as this phase's boundary requires.
+Phase 14 makes the template/instance split real and durable: **Case Template is immutable published content; Case Instance is runtime data.** One new `case_instances` table (migration `0017`) carries the reproduction identity (`case_template_id`, `template_version`, `seed`, `pipeline_algorithm_version`), the authoritative, immutable `generated_snapshot` (the Phase 12 `GeneratedCase` payload, strongly typed JSONB), and a minimal four-state lifecycle (`generated → active → completed | abandoned`) with `started_at`/`completed_at` and retry metadata. Snapshot strategy **C** is chosen because the repository has no revision history (Phase 27) — the snapshot is the runtime authority, regeneration is the audit when content@version still loads. Ownership is explicitly deferred to Phase 38's player model (no invented auth). Idempotency is deliberately scoped: the PK prevents row collisions but request-idempotent creation (no duplicate rows from an identical request) is genuinely deferred to Phase 36 — it is **not** conflated with Phase 13's reproduction determinism, which guarantees identical content on regeneration, not row deduplication. Retry writes at most one row per instance, and every dialogue/decision/discovery/inventory/scoring/save concern is traced to its owning phase. game-rules stays a pure dependency-free library; the loader and orchestrator contracts are defined as a future pure `packages/runtime`, which is the only layer allowed to depend on both shared-types and game-rules. Implementation belongs in migration `0017`, shared-types additions (`CaseInstance` with a JSON-opaque `generatedSnapshot`), and the runtime package — gated on this document's approval, exactly as this phase's boundary requires.
