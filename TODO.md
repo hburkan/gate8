@@ -776,14 +776,22 @@ Show:
 
 # PHASE 20 — ADMIN DOCUMENT MANAGEMENT
 
-- [ ] Document editor.
-- [ ] Document type.
-- [ ] Title.
-- [ ] Description.
-- [ ] Asset.
-- [ ] Fake/real classification.
-- [ ] Tags.
-- [ ] Usage relations.
+Document editor:
+
+- [x] Title.
+- [x] Document type. _(free-form text per R4 — no controlled type catalog)_
+- [x] Description.
+- [x] Asset. _(path/URL text field; upload/storage deferred — no storage bucket exists)_
+- [ ] Fake/real classification. _(deferred — no documents.role column; real/fake/decoy is contextual per relation on case_documents.role / location_documents.role, shown read-only in usage list; R4 model)_
+- [ ] Tags. _(deferred — no backing store; no tags column/table in schema)_
+- [x] Usage relations.
+
+Show:
+
+    Used in Locations
+    Used in Cases
+    Used in Chapters
+    (read-only; locations/cases derived from location_documents/case_documents — migration 0022 grants service_role SELECT; chapters derived via the document's cases — no direct chapter->document table)
 
 ---
 
