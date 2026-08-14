@@ -1,6 +1,6 @@
 # Phase 16 — Admin Dashboard
 
-> **Status:** DESIGN ONLY (not implemented; no migration, code, or commit in this document). This design spec governs the read-only Admin Dashboard for the Gümrük Kontrol Memuru CMS. It grounds every claim in the actual repository state at `fdb28f4` (`main`, Phase 15 committed and pushed, clean tree).
+> **Status:** IMPLEMENTED and pushed (`3f7c751` design, `14e2a7e` implementation, HEAD == origin/main). This document is the amended design record: the original design said "no migration" (below), and one **approved additive deviation** — migration `0018_service_role_reads.sql` — was required and recorded in §8a "Implementation Deviation / Environment Finding". This design spec governs the read-only Admin Dashboard for the Gümrük Kontrol Memuru CMS. It grounds every claim in the actual repository state at `fdb28f4` (`main`, Phase 15 committed and pushed, clean tree).
 >
 > **Scope:** A read-only dashboard delivered as the new landing surface of the existing admin shell, showing the eleven metrics named in `TODO.md` Phase 16. It determines which of those metrics are computable from the existing schema now, which are deferred to their owning phases (26 validation, 27 versioning, 28 release, 40 audit, 41 analytics), how the dashboard authenticates and authorizes server-side, and exactly which files are added or modified.
 >
@@ -62,7 +62,7 @@ Ground-truth inventory of what exists before Phase 16:
 
 ## 3. Phase 16 Metric Inventory and Feasibility
 
-The eleven TODO items fall into three buckets: computable from the existing schema now (no migration), computable from existing columns but semantically limited, and not-backed-anywhere yet (owning phase).
+The eleven TODO items fall into three buckets: computable from the existing schema now (no schema migration — the metric computation itself needs no new table/column; the approved `0018` base-privilege grant in §8a is separate and infra-only), computable from existing columns but semantically limited, and not-backed-anywhere yet (owning phase).
 
 | #   | Metric (TODO)             | Computable now from schema? | Backing source (verified)                                                 | Determined disposition                                                                               |
 | --- | ------------------------- | --------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -101,7 +101,7 @@ These semantics are the only sane reading of the TODO wording against the frozen
 
 Phase 16 introduces **no new auth**; it consumes the Phase 15 plumbing:
 
-- **Dashboard data access is server-side only.** Every content query runs in a **Server Component** (or a server action / route handler where a refresh is needed) via the **service-role client** `createServiceRoleClient()` (`src/lib/supabase/admin.ts`), which bypasses RLS. This is exactly the Phase 15 §8 D3(a) posture: RLS stays **default-deny with zero new policies** (0010 enablement + per-table `enable row level security`; no grants anywhere). The browser never queries PostgREST for content; there is no client-JWT read of any content table. **No migration, no RLS grant, no PostgREST grant** is added by Phase 16.
+- **Dashboard data access is server-side only.** Every content query runs in a **Server Component** (or a server action / route handler where a refresh is needed) via the **service-role client** `createServiceRoleClient()` (`src/lib/supabase/admin.ts`), which bypasses RLS. This is exactly the Phase 15 §8 D3(a) posture: RLS stays **default-deny with zero new policies** (0010 enablement + per-table `enable row level security`). **One additive base-privilege migration** (`0018_service_role_reads.sql`) grants `SELECT` to `service_role` **only** because this Supabase environment does not auto-expose tables (see §8a); it grants nothing to `anon`/`authenticated` and adds no RLS policy. The browser never queries PostgREST for content; there is no client-JWT read of any content table. **No RLS policy and no PostgREST grant** is added by Phase 16.
 - **Authorization gate.** The dashboard route reads `supabase.auth.getUser()` (token-verified — never `getSession` alone), derives the role with `roleFromUser`, and requires the `view` permission via `roleHasPermission(role, 'view')`. Because every role in the Phase 15 matrix includes `view`, all four admin roles can see the dashboard — REVIEWER included (view-only is exactly its job). The guard is server-side: not authenticated → `redirect('/login')`; authenticated but role null/unknown or lacking `view` (defensive; no shipped role lacks `view`) → render an "unauthorized" state distinct from not-logged-in. No client-side role decision is ever trusted for the gate.
 - **Service-role key never reaches the browser.** All dashboard queries live in server components; `SUPABASE_SERVICE_ROLE_KEY` stays server-only.
 - **`case_instances` gets no read.** Consistent with Phase 15 D4, Phase 16 does not touch `case_instances` (it is outside the lifecycle set, §4).
@@ -132,12 +132,44 @@ Phase 16 introduces **no new auth**; it consumes the Phase 15 plumbing:
 
 ## 8. Required Schema / Migration / Config Changes
 
-**Determined: NONE.** No migration file is written. Rationale (grounded in the frozen schema):
+**Original design determination: NONE** — no schema, table, column, enum, trigger, or index change was planned (rationale below). During implementation, one **approved additive migration** became necessary (infrastructure, not design scope): `0018_service_role_reads.sql` — base `SELECT` privileges for the server-side `service_role` reads this dashboard performs. Full rationale and the exact grant surface are recorded in **§8a**. The original design reasoning still holds and is kept here:
 
 - Every Phase 16-servable metric (total counts, draft/published counts, recent changes via `updated_at`/`version`) is computable from **existing columns and indexes** (`*_status_idx`, `created_at`, `updated_at`, `version`). There is no new column, table, enum, trigger, or index to add.
 - Deferred metrics ("Recent releases", "Content validation errors") have **no backing store** and **must not be given one in Phase 16** — creating `releases` or `validation_*`/`audit_log` tables would duplicate Phase 28/26/40 scope and violate the additive, one-concern migration strategy. They are surfaced as empty states (§10/§3).
 - No `config.toml` change is required (auth/config settled in Phase 15).
 - `0010_rls.sql` and the per-table `enable row level security` calls stay **zero-policy**; Phase 16 adds **no** grants to `anon` or `authenticated`, preserving the verified default-deny invariant.
+
+### 8a. Implementation Deviation / Environment Finding (approved, post-design)
+
+**What happened:** The implementation of this dashboard performs server-side content reads through the **service-role client** (`createServiceRoleClient()`, `apps/admin/src/lib/supabase/admin.ts`). Testing from a clean database proved that in **this Supabase environment** the `service_role` database role does **not** receive base `SELECT` privileges on `public` content tables automatically:
+
+- `config.toml` does **not** set `auto_expose_new_tables` (it is commented out), so this stack follows the newer default where tables created by `postgres` in `public` are **not** auto-exposed to `anon`/`authenticated`/`service_role`.
+- `service_role` has `rolbypassrls = true` (it bypasses RLS), but bypassing RLS grants **no base table privileges**. Verified via `information_schema.role_table_grants`: before `0018`, `service_role` held only `DELETE`/`REFERENCES`/`TRIGGER`/`TRUNCATE` on these tables — no `SELECT` — so dashboard reads failed with `permission denied for table ...`.
+
+**The approved deviation:** migration **`0018_service_role_reads.sql`** was added. It grants **`SELECT` only to `service_role`** on exactly the nine content tables that make up the Phase 16 dashboard read surface (`CONTENT_TABLES` in `apps/admin/src/lib/dashboard/metrics.ts`):
+
+- `public.characters`
+- `public.items`
+- `public.documents`
+- `public.evidence`
+- `public.locations`
+- `public.missions`
+- `public.dialogue_definitions`
+- `public.cases`
+- `public.chapters`
+
+**Explicitly preserved by the deviation (Phase 15 default-deny model is NOT weakened):**
+
+- **No** `SELECT` (or any other privilege) to `anon` or `authenticated` — those roles remain denied and RLS still applies to them.
+- **No RLS policies are added or modified.** `0010_rls.sql` and every per-table `enable row level security` stay zero-policy. The deviation changes _base table privileges for the server-side role only_; it does not change row-level security posture.
+- **No `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`/`REFERENCES`/`TRIGGER` grants** — read-only, matching the read-only dashboard.
+- **No sequence grants** — the dashboard never generates identifiers.
+- **`case_instances` is explicitly excluded**, consistent with Phase 15 D4 and D4 below: it is runtime data (Phase 14), not content; admin view of instances is deferred to Phase 41/42 analytics.
+- **No `config.toml` change** and `auto_expose_new_tables` is left unset.
+
+**Why this is correct and not a security regression:** `service_role` is the server-side trusted key used exclusively by server components behind the Phase 15 auth gate (`getUser` → `roleFromUser` → `roleHasPermission(view)`); it never reaches the browser. The grant adds no client-facing access — the browser path (anonymous/authenticated users) still has zero base privileges and zero RLS policies. The default-deny invariant for non-service roles is unchanged and asserted in tests.
+
+**Reproducibility:** `0018` is an **additive, committed migration** in the normal `0001→0018` sequence. `supabase db reset` applies it cleanly and deterministically, so fresh environments get the identical grant surface. This is **required for fresh environments**: without it, the Phase 16 dashboard's service-role reads fail in any newly reset stack that does not auto-expose tables.
 
 ---
 
@@ -194,7 +226,7 @@ No new dependencies, no new env vars, no package.json change.
 ## 13. Security Considerations
 
 - **Service-role key stays server-only** (§5): dashboard queries run only in server components via `createServiceRoleClient`; never exported to client components; never in the browser bundle.
-- **No RLS weakening.** Zero new policies, zero grants to `anon`/`authenticated`; the verified default-deny invariant (Phase 15 §20 / D3a) is preserved and asserted in tests (psql `policy_count` stays 0 on content tables and `case_instances`).
+- **No RLS weakening.** Zero new RLS policies, zero grants to `anon`/`authenticated`; the verified default-deny invariant (Phase 15 §20 / D3a) is preserved and asserted in tests (psql `policy_count` stays 0 on content tables and `case_instances`). The only added privilege is the approved `0018` base `SELECT` to `service_role` (server-side role only, §8a), which grants no client-facing access.
 - **Authorization never decided client-side.** Gate uses token-verified `getUser()` + `roleFromUser` + `roleHasPermission`; the UI may display the role but never authorizes from it.
 - **No new attack surface:** read-only, no writes, no user-supplied SQL, no dynamic route params parsing arbitrary input; column names come from a hard-coded per-entity field map (no raw interpolation).
 - **`case_instances` untouched** (§4/§5) — no admin read of runtime data; keeps Phase 14/15 boundaries.
@@ -245,14 +277,14 @@ No new dependencies, no new env vars, no package.json change.
 
 ## 17. Decision Log
 
-| ID  | Decision                                       | Options                                                                  | Recommendation (resolved)                                                                                        | Codebase check                                                             | Hidden implications                                                               |
-| --- | ---------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| D1  | Backing for "Recent releases" metric           | render empty state vs create `releases` table                            | **Empty state; defer to Phase 28**                                                                               | no `releases` table in 0001–0017                                           | Phase 28 designs the table one-concern; Phase 16 must not pre-create it           |
-| D2  | Backing for "Content validation errors" metric | render empty state vs create validation store / run validation at render | **Empty state; defer to Phase 26 (+ Phase 40 audit)**                                                            | no validation store; content-schema has no aggregate validator             | Phase 16 must not run Phase 26 logic or invent a validator                        |
-| D3  | "Recent changes" semantics                     | raw `updated_at`/`version` view vs backfill revision history             | **Raw `updated_at`/`version` view, labeled "Recently updated content"**                                          | `updated_at`/`version` on all nine lifecycle tables; no revision rows      | Phase 27 owns revision history/diff; no backfill table here                       |
-| D4  | Content-table set (denominator)                | nine lifecycle tables + relation tables vs nine only                     | **Nine lifecycle tables only; excludes relations and `case_instances`**                                          | relations lack `content_status`; `case_instances` is runtime (Phase 15 D4) | Provides the Phase 17/26/28 shared denominator; documented in UI note             |
-| D5  | Metric type location                           | `apps/admin` local vs shared-types                                       | **Local to `apps/admin` (YAGNI); shared-types unchanged**                                                        | no cross-package consumer of dashboard metrics exists                      | Shared-types stays leaf; add pure types only when a real consumer (28/41) appears |
-| D6  | Auth/data access                               | Phase 15 server-side service-role + role gates vs new browser/JWT path   | **Reuse Phase 15: server components + `createServiceRoleClient` + `getUser`/`roleFromUser`/`roleHasPermission`** | Phase 15 plumbing committed and verified                                   | RLS stays default-deny; no grant added; `case_instances` untouched                |
+| ID  | Decision                                       | Options                                                                  | Recommendation (resolved)                                                                                        | Codebase check                                                             | Hidden implications                                                                                                  |
+| --- | ---------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| D1  | Backing for "Recent releases" metric           | render empty state vs create `releases` table                            | **Empty state; defer to Phase 28**                                                                               | no `releases` table in 0001–0017                                           | Phase 28 designs the table one-concern; Phase 16 must not pre-create it                                              |
+| D2  | Backing for "Content validation errors" metric | render empty state vs create validation store / run validation at render | **Empty state; defer to Phase 26 (+ Phase 40 audit)**                                                            | no validation store; content-schema has no aggregate validator             | Phase 16 must not run Phase 26 logic or invent a validator                                                           |
+| D3  | "Recent changes" semantics                     | raw `updated_at`/`version` view vs backfill revision history             | **Raw `updated_at`/`version` view, labeled "Recently updated content"**                                          | `updated_at`/`version` on all nine lifecycle tables; no revision rows      | Phase 27 owns revision history/diff; no backfill table here                                                          |
+| D4  | Content-table set (denominator)                | nine lifecycle tables + relation tables vs nine only                     | **Nine lifecycle tables only; excludes relations and `case_instances`**                                          | relations lack `content_status`; `case_instances` is runtime (Phase 15 D4) | Provides the Phase 17/26/28 shared denominator; documented in UI note                                                |
+| D5  | Metric type location                           | `apps/admin` local vs shared-types                                       | **Local to `apps/admin` (YAGNI); shared-types unchanged**                                                        | no cross-package consumer of dashboard metrics exists                      | Shared-types stays leaf; add pure types only when a real consumer (28/41) appears                                    |
+| D6  | Auth/data access                               | Phase 15 server-side service-role + role gates vs new browser/JWT path   | **Reuse Phase 15: server components + `createServiceRoleClient` + `getUser`/`roleFromUser`/`roleHasPermission`** | Phase 15 plumbing committed and verified                                   | RLS stays default-deny; `case_instances` untouched; approved deviation §8a adds base `SELECT` to `service_role` only |
 
 ---
 
@@ -260,7 +292,7 @@ No new dependencies, no new env vars, no package.json change.
 
 - ✅ **No invented tables schemed.** Every Phase 16-servable metric is computable from the existing frozen schema; deferred metrics render empty states instead (D1/D2). No `releases`/`validation`/`dashboard_*`/`audit` table is proposed.
 - ✅ **No duplication of schema concepts.** "Draft content"/"Published content" reuse the existing `content_status` lifecycle; "Total X" counts existing tables; no new lifecycle/status concept.
-- ✅ **No premature RLS policies.** Phase 16 adds zero policies/grants; RLS stays default-deny (Phase 15 D3a posture); `case_instances` is untouched (Phase 15 D4).
+- ✅ **No premature RLS policies.** Phase 16 adds zero RLS policies; RLS stays default-deny (Phase 15 D3a posture); `case_instances` is untouched (Phase 15 D4). The one approved additive change is migration `0018` granting base `SELECT` to `service_role` only (server-side role, §8a) — no client-facing privilege, no RLS change.
 - ✅ **game-rules/runtime stay pure and untouched**; content-schema and shared-types are untouched (D5). No new dependency direction.
 - ✅ **Admin is a consumer, not an owner.** The dashboard consumes the Phase 15 read surface and the frozen schema; it owns no domain-generation, validation, versioning, release, or RLS logic.
 - ✅ **Preserved deterministic contracts (Phases 6–13) and Phase 14 case-instance persistence.** Phase 16 is read-only; no write path exists to perturb generation or runtime rows.
@@ -269,10 +301,10 @@ No new dependencies, no new env vars, no package.json change.
 - ✅ **Exact expected files** listed (§11) — one new module, one new test file, one modified page; nothing else.
 - ✅ **No Phase 17+ work started.** No CRUD, no content library, no validation engine, no versioning/release tables.
 - ✅ **Grounded in the repo** at `fdb28f4`/HEAD: migrations 0001–0017 read in full; Phase 15 commit verified; Phase 26/27/28/40/41 TODO sections referenced by line.
-- ✅ **DESIGN ONLY** — no migration, no code, no package change, no commit. `git status` at handoff must show only this design doc as untracked.
+- ✅ **DESIGN ONLY at original handoff** — the design phase produced no migration, no code, no package change, no commit. Post-approval, the implementation added the one approved additive migration `0018` (base `SELECT` to `service_role`, §8a); this document was amended to record that deviation.
 
 ---
 
 ## 19. Conclusion
 
-Phase 16 delivers the **read-only Admin Dashboard**: the existing admin shell's `page.tsx` becomes a metric overview showing the six TODO totals (Chapters, Cases, Characters, Items, Documents, Evidence), Draft/Published content buckets computed from the existing `content_status` lifecycle, and a "Recently updated content" list from the real `updated_at`/`version` columns — all behind the Phase 15 server-side auth gate (token-verified `getUser` → `roleFromUser` → `view` permission), with data fetched through the server-only service-role client and **zero new RLS policies** (Phase 15 D3a posture preserved; `case_instances` untouched per D4). "Recent releases" and "Content validation errors" have **no backing store** and are rendered as honest empty states with their owning phases (28/26) named — Phase 16 creates no table, no schema concept, and no store for them. No migration, no config change, no shared-types/content-schema/game-rules/runtime change; the only planned files are a new `apps/admin/src/lib/dashboard/metrics.ts`, a matching unit test, and a modified `apps/admin/src/app/page.tsx`. This document is a **design proposal; it will not be committed or pushed until you approve.**
+Phase 16 delivers the **read-only Admin Dashboard**: the existing admin shell's `page.tsx` becomes a metric overview showing the six TODO totals (Chapters, Cases, Characters, Items, Documents, Evidence), Draft/Published content buckets computed from the existing `content_status` lifecycle, and a "Recently updated content" list from the real `updated_at`/`version` columns — all behind the Phase 15 server-side auth gate (token-verified `getUser` → `roleFromUser` → `view` permission), with data fetched through the server-only service-role client and **zero new RLS policies** (Phase 15 D3a posture preserved; `case_instances` untouched per D4). "Recent releases" and "Content validation errors" have **no backing store** and are rendered as honest empty states with their owning phases (28/26) named — Phase 16 creates no table, no schema concept, and no store for them. No config change, no shared-types/content-schema/game-rules/runtime change; the files are `apps/admin/src/lib/dashboard/metrics.ts`, a matching unit test, and `apps/admin/src/app/page.tsx`, plus the **one approved additive migration `0018_service_role_reads.sql`** (base `SELECT` to `service_role` only, required because this environment does not auto-expose tables; see §8a). This document was a **design proposal at handoff; it was committed (`3f7c751`) only after approval and later amended to record the `0018` deviation.**
