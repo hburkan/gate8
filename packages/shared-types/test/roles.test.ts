@@ -29,6 +29,12 @@ describe('ROLE_PERMISSIONS', () => {
     }
   });
 
+  it('gives every role the view permission (Phase 16 dashboard gate admits all roles)', () => {
+    for (const role of ADMIN_ROLES) {
+      expect(roleHasPermission(role, 'view')).toBe(true);
+    }
+  });
+
   it('gives SUPER_ADMIN every permission', () => {
     expect(ROLE_PERMISSIONS.SUPER_ADMIN).toEqual(ADMIN_PERMISSIONS);
   });
