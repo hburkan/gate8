@@ -5,6 +5,7 @@ import { roleHasPermission } from '@gate8/shared-types';
 import { isLibraryEntityKey, getAdapter } from '../../../../lib/library/registry';
 import { EntityForm } from '../../../../components/library/EntityForm';
 import { CharacterForm } from '../../../../components/character/CharacterForm';
+import { ItemForm } from '../../../../components/item/ItemForm';
 import { createLibraryItem } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { Metadata } from 'next';
@@ -60,6 +61,13 @@ export default async function NewEntityPage({ params }: NewPageProps) {
         <div className="mt-6 rounded-lg border bg-white p-6">
           {adapter.editor === 'character' ? (
             <CharacterForm
+              action={createLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={{}}
+              submitLabel="Create"
+            />
+          ) : adapter.editor === 'item' ? (
+            <ItemForm
               action={createLibraryItem}
               initialState={initialLibraryFormState()}
               initialValues={{}}
