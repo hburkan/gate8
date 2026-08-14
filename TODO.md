@@ -727,24 +727,25 @@ Every entity must support:
 
 Character editor:
 
-- [ ] Name.
-- [ ] Surname.
-- [ ] Age.
-- [ ] Nationality.
-- [ ] Occupation.
-- [ ] Description.
-- [ ] Portrait.
-- [ ] Tags.
-- [ ] Roles.
-- [ ] Available items.
-- [ ] Available documents.
-- [ ] Usage list.
+- [x] Name.
+- [x] Surname.
+- [x] Age.
+- [x] Nationality.
+- [x] Occupation.
+- [x] Description.
+- [x] Portrait. _(path/URL text field; upload/storage deferred — no storage bucket exists)_
+- [ ] Tags. _(deferred — no backing store; no tags column/table in schema)_
+- [ ] Roles. _(deferred — roles are contextual per relation; shown read-only in usage list)_
+- [ ] Available items. _(deferred — no per-character pool; Phases 19/23)_
+- [ ] Available documents. _(deferred — no per-character pool; later phase)_
+- [x] Usage list.
 
 Show:
 
     Used in Locations
     Used in Cases
     Used in Chapters
+    (read-only; chapters derived via the character's cases — no direct chapter->character table)
 
 ---
 
