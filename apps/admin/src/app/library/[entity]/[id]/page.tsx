@@ -8,11 +8,13 @@ import { getEntity } from '../../../../lib/library/query';
 import { getCharacterUsage } from '../../../../lib/library/character-usage';
 import { getItemUsage } from '../../../../lib/library/item-usage';
 import { getDocumentUsage } from '../../../../lib/library/document-usage';
+import { getEvidenceUsage } from '../../../../lib/library/evidence-usage';
 import { StatusBadge } from '../../../../components/library/StatusBadge';
 import { ConfirmButton } from '../../../../components/library/ConfirmButton';
 import { CharacterUsageList } from '../../../../components/character/CharacterUsageList';
 import { ItemUsageList } from '../../../../components/item/ItemUsageList';
 import { DocumentUsageList } from '../../../../components/document/DocumentUsageList';
+import { EvidenceUsageList } from '../../../../components/evidence/EvidenceUsageList';
 import { duplicateLibraryItem, archiveLibraryItem } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { LibraryEntityKey } from '../../../../lib/library/types';
@@ -103,6 +105,14 @@ export default async function EntityDetailPage({ params }: DetailPageProps) {
       documentUsage = null;
     }
   }
+  let evidenceUsage = null;
+  if (entity === 'evidence') {
+    try {
+      evidenceUsage = await getEvidenceUsage(libraryServiceClient(), id);
+    } catch {
+      evidenceUsage = null;
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-16">
@@ -154,6 +164,9 @@ export default async function EntityDetailPage({ params }: DetailPageProps) {
         {entity === 'items' && itemUsage ? <ItemUsageList usage={itemUsage} /> : null}
         {entity === 'documents' && documentUsage ? (
           <DocumentUsageList usage={documentUsage} />
+        ) : null}
+        {entity === 'evidence' && evidenceUsage ? (
+          <EvidenceUsageList usage={evidenceUsage} />
         ) : null}
 
         {canCreate || canDelete ? (

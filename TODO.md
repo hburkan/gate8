@@ -797,16 +797,23 @@ Show:
 
 # PHASE 21 — ADMIN EVIDENCE MANAGEMENT
 
-- [ ] Evidence editor.
-- [ ] Type.
-- [ ] Importance.
-- [ ] Discovery method.
-- [ ] Conditions.
-- [ ] Dependencies.
-- [ ] Related items.
-- [ ] Related documents.
-- [ ] Related characters.
-- [ ] Related cases.
+- [x] Evidence editor.
+- [x] Type. _(SQL enum evidence_type: physical/digital/documentary/forensic/testimony)_
+- [x] Importance. _(SQL enum evidence_importance: low/medium/high/critical)_
+- [ ] Discovery method. _(deferred at entity level — no evidence.discovery_method column; discovery is contextual per relation on case_evidence.discovery_method / location_evidence.discovery_method (free text R4), shown read-only in usage list)_
+- [ ] Conditions. _(deferred — no evidence.conditions column; conditions/discovery_condition are opaque relation JSONB owned by the Phase 11 rule engine)_
+- [ ] Dependencies. _(deferred — no backing store; no evidence_dependencies table/column anywhere)_
+- [ ] Related items. _(deferred — no backing store; no evidence_items table)_
+- [ ] Related documents. _(deferred — no backing store; no evidence_documents table)_
+- [ ] Related characters. _(deferred — no backing store; no evidence_characters table)_
+- [x] Related cases.
+
+Show:
+
+    Used in Locations
+    Used in Cases
+    Used in Chapters
+    (read-only; locations/cases derived from location_evidence/case_evidence — migration 0023 grants service_role SELECT; chapters derived via the evidence's cases — no direct chapter->evidence table; per-relation role/importance override/discovery method shown read-only; relation writes belong to Phase 23 Case Builder)
 
 ---
 
