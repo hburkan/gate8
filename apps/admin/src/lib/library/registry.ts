@@ -70,6 +70,12 @@ export interface EntityAdapter {
   listColumns: readonly LibraryListColumn[];
   /** content-schema DraftSchema for create/edit validation. */
   draftSchema: LibraryDraftSchema;
+  /**
+   * Optional specialized editor kind. When `'character'`, the new/edit pages
+   * render the Phase 18 `CharacterForm` instead of the generic `EntityForm`
+   * (same server actions and validation; presentation only).
+   */
+  editor?: 'character';
 }
 
 const ADAPTERS: Record<LibraryEntityKey, EntityAdapter> = {
@@ -95,6 +101,7 @@ const ADAPTERS: Record<LibraryEntityKey, EntityAdapter> = {
     enumOptions: {},
     listColumns: [],
     draftSchema: characterDraftSchema,
+    editor: 'character',
   },
   items: {
     key: 'items',

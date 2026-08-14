@@ -7,6 +7,7 @@ import { isLibraryEntityKey, getAdapter } from '../../../../../lib/library/regis
 import { getEntity } from '../../../../../lib/library/query';
 import { rowToFormValues, initialLibraryFormState } from '../../../../../lib/library/form-state';
 import { EntityForm } from '../../../../../components/library/EntityForm';
+import { CharacterForm } from '../../../../../components/character/CharacterForm';
 import { updateLibraryItem } from '../../../actions';
 import type { LibraryEntityKey } from '../../../../../lib/library/types';
 import type { Metadata } from 'next';
@@ -74,14 +75,24 @@ export default async function EditEntityPage({ params }: EditPageProps) {
         </h1>
 
         <div className="mt-6 rounded-lg border bg-white p-6">
-          <EntityForm
-            entity={entity}
-            action={updateLibraryItem}
-            initialState={initialLibraryFormState()}
-            initialValues={initialValues}
-            submitLabel="Save"
-            entityId={id}
-          />
+          {adapter.editor === 'character' ? (
+            <CharacterForm
+              action={updateLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={initialValues}
+              submitLabel="Save"
+              entityId={id}
+            />
+          ) : (
+            <EntityForm
+              entity={entity}
+              action={updateLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={initialValues}
+              submitLabel="Save"
+              entityId={id}
+            />
+          )}
         </div>
       </main>
     </div>

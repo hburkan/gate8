@@ -4,6 +4,7 @@ import { roleFromUser } from '../../../../lib/auth/roles';
 import { roleHasPermission } from '@gate8/shared-types';
 import { isLibraryEntityKey, getAdapter } from '../../../../lib/library/registry';
 import { EntityForm } from '../../../../components/library/EntityForm';
+import { CharacterForm } from '../../../../components/character/CharacterForm';
 import { createLibraryItem } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { Metadata } from 'next';
@@ -57,13 +58,22 @@ export default async function NewEntityPage({ params }: NewPageProps) {
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">New {adapter.singularLabel}</h1>
 
         <div className="mt-6 rounded-lg border bg-white p-6">
-          <EntityForm
-            entity={entity}
-            action={createLibraryItem}
-            initialState={initialLibraryFormState()}
-            initialValues={{}}
-            submitLabel="Create"
-          />
+          {adapter.editor === 'character' ? (
+            <CharacterForm
+              action={createLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={{}}
+              submitLabel="Create"
+            />
+          ) : (
+            <EntityForm
+              entity={entity}
+              action={createLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={{}}
+              submitLabel="Create"
+            />
+          )}
         </div>
       </main>
     </div>

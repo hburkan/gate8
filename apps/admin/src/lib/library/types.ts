@@ -88,6 +88,7 @@ export interface QueryResult {
 export interface LibraryQueryBuilder extends PromiseLike<QueryResult> {
   eq(column: string, value: string | number): LibraryQueryBuilder;
   ilike(column: string, pattern: string): LibraryQueryBuilder;
+  in(column: string, values: Array<string | number>): LibraryQueryBuilder;
   order(column: string, opts: { ascending: boolean }): LibraryQueryBuilder;
   range(start: number, end: number): LibraryQueryBuilder;
   limit(n: number): LibraryQueryBuilder;

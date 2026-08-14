@@ -40,6 +40,10 @@ function fakeClient(stubs: Stub[]): { client: LibraryClient; log: unknown[] } {
         log.push({ op: 'ilike', table, column, pattern });
         return builder(table);
       },
+      in(column: string, values: Array<string | number>) {
+        log.push({ op: 'in', table, column, values });
+        return builder(table);
+      },
       order(column: string, opts: { ascending: boolean }) {
         log.push({ op: 'order', table, column, ...opts });
         return builder(table);

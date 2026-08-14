@@ -5,8 +5,10 @@ import { roleFromUser } from '../../../../lib/auth/roles';
 import { roleHasPermission } from '@gate8/shared-types';
 import { isLibraryEntityKey, getAdapter } from '../../../../lib/library/registry';
 import { getEntity } from '../../../../lib/library/query';
+import { getCharacterUsage } from '../../../../lib/library/character-usage';
 import { StatusBadge } from '../../../../components/library/StatusBadge';
 import { ConfirmButton } from '../../../../components/library/ConfirmButton';
+import { CharacterUsageList } from '../../../../components/character/CharacterUsageList';
 import { duplicateLibraryItem, archiveLibraryItem } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { LibraryEntityKey } from '../../../../lib/library/types';
@@ -73,6 +75,15 @@ export default async function EntityDetailPage({ params }: DetailPageProps) {
 
   const fields = Object.entries(adapter.fieldMap);
 
+  let usage = null;
+  if (entity === 'characters') {
+    try {
+      usage = await getCharacterUsage(libraryServiceClient(), id);
+    } catch {
+      usage = null;
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-16">
       <main className="mx-auto w-full max-w-4xl">
@@ -118,6 +129,8 @@ export default async function EntityDetailPage({ params }: DetailPageProps) {
             </div>
           ))}
         </dl>
+
+        {entity === 'characters' && usage ? <CharacterUsageList usage={usage} /> : null}
 
         {canCreate || canDelete ? (
           <div className="mt-6 flex items-center gap-3">
