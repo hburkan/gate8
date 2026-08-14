@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '../lib/supabase/server';
 import { createServiceRoleClient } from '../lib/supabase/admin';
 import { roleFromUser } from '../lib/auth/roles';
@@ -88,14 +89,22 @@ export default async function AdminDashboard() {
       <main className="mx-auto w-full max-w-5xl">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
-          <form action={signOutAction}>
-            <button
-              type="submit"
+          <div className="flex items-center gap-3">
+            <Link
+              href="/library"
               className="rounded-lg border px-3 py-1.5 text-sm hover:bg-zinc-100"
             >
-              Sign out
-            </button>
-          </form>
+              Content Library
+            </Link>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="rounded-lg border px-3 py-1.5 text-sm hover:bg-zinc-100"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
         <p className="mt-2 text-sm text-zinc-500">
           Signed in as <span className="font-medium text-zinc-800">{user.email}</span>

@@ -1,0 +1,71 @@
+import { redirect, notFound } from 'next/navigation';
+import { createClient } from '../../../../lib/supabase/server';
+import { roleFromUser } from '../../../../lib/auth/roles';
+import { roleHasPermission } from '@gate8/shared-types';
+import { isLibraryEntityKey, getAdapter } from '../../../../lib/library/registry';
+import { EntityForm } from '../../../../components/library/EntityForm';
+import { createLibraryItem } from '../../actions';
+import { initialLibraryFormState } from '../../../../lib/library/form-state';
+import type { Metadata } from 'next';
+
+interface NewPageProps {
+  params: Promise<{ entity: string }>;
+}
+
+export const metadata: Metadata = {
+  title: 'New — Content Library',
+};
+
+export default async function NewEntityPage({ params }: NewPageProps) {
+  const { entity } = await params;
+  if (!isLibraryEntityKey(entity)) {
+    notFound();
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const role = roleFromUser(user);
+
+  if (!role || !roleHasPermission(role, 'create')) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-4 py-16">
+        <main className="w-full max-w-xl">
+          <h1 className="text-2xl font-semibold tracking-tight">Unauthorized</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Your account does not have permission to create content.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  const adapter = getAdapter(entity);
+
+  return (
+    <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-16">
+      <main className="mx-auto w-full max-w-2xl">
+        <a href={`/library/${entity}`} className="text-sm text-zinc-500 hover:text-zinc-700">
+          ← {adapter.label}
+        </a>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">New {adapter.singularLabel}</h1>
+
+        <div className="mt-6 rounded-lg border bg-white p-6">
+          <EntityForm
+            entity={entity}
+            action={createLibraryItem}
+            initialState={initialLibraryFormState()}
+            initialValues={{}}
+            submitLabel="Create"
+          />
+        </div>
+      </main>
+    </div>
+  );
+}

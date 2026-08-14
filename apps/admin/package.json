@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@gate8/content-schema": "0.1.0",
     "@gate8/shared-types": "0.1.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",

@@ -1,41 +1,8 @@
 import type { ContentStatus } from '@gate8/shared-types';
+import { CONTENT_TABLES, TITLE_COLUMN } from '../library/registry';
+import type { ContentTable } from '../library/registry';
 
-/**
- * The nine content tables that carry the shared content lifecycle
- * (`status content_status`, `version`, `created_at`, `updated_at`).
- *
- * Denominator for every Phase 16 dashboard metric. Relations (`case_*`,
- * `location_*`, `chapter_*`) are excluded: they carry a `version` but no
- * independent lifecycle. `case_instances` is excluded by design — it is
- * runtime data, not content (Phase 14 §6; Phase 15 decision D4); admin view
- * of instances is deferred to Phase 41/42 analytics.
- */
-export const CONTENT_TABLES = [
-  'characters',
-  'items',
-  'documents',
-  'evidence',
-  'locations',
-  'missions',
-  'dialogue_definitions',
-  'cases',
-  'chapters',
-] as const;
-
-export type ContentTable = (typeof CONTENT_TABLES)[number];
-
-/** Display column per entity for the "Recent changes" list (hard-coded map, never user input). */
-export const TITLE_COLUMN: Record<ContentTable, 'title' | 'name'> = {
-  characters: 'name',
-  items: 'name',
-  documents: 'title',
-  evidence: 'name',
-  locations: 'name',
-  missions: 'title',
-  dialogue_definitions: 'title',
-  cases: 'title',
-  chapters: 'title',
-};
+export { CONTENT_TABLES, TITLE_COLUMN, type ContentTable } from '../library/registry';
 
 /** A single row the dashboard renders in the "Recently updated content" list. */
 export interface RecentChange {
