@@ -6,6 +6,7 @@ import { isLibraryEntityKey, getAdapter } from '../../../../lib/library/registry
 import { EntityForm } from '../../../../components/library/EntityForm';
 import { CharacterForm } from '../../../../components/character/CharacterForm';
 import { ItemForm } from '../../../../components/item/ItemForm';
+import { DocumentForm } from '../../../../components/document/DocumentForm';
 import { createLibraryItem } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { Metadata } from 'next';
@@ -68,6 +69,13 @@ export default async function NewEntityPage({ params }: NewPageProps) {
             />
           ) : adapter.editor === 'item' ? (
             <ItemForm
+              action={createLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={{}}
+              submitLabel="Create"
+            />
+          ) : adapter.editor === 'document' ? (
+            <DocumentForm
               action={createLibraryItem}
               initialState={initialLibraryFormState()}
               initialValues={{}}

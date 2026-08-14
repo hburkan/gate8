@@ -9,6 +9,7 @@ import { rowToFormValues, initialLibraryFormState } from '../../../../../lib/lib
 import { EntityForm } from '../../../../../components/library/EntityForm';
 import { CharacterForm } from '../../../../../components/character/CharacterForm';
 import { ItemForm } from '../../../../../components/item/ItemForm';
+import { DocumentForm } from '../../../../../components/document/DocumentForm';
 import { updateLibraryItem } from '../../../actions';
 import type { LibraryEntityKey } from '../../../../../lib/library/types';
 import type { Metadata } from 'next';
@@ -86,6 +87,14 @@ export default async function EditEntityPage({ params }: EditPageProps) {
             />
           ) : adapter.editor === 'item' ? (
             <ItemForm
+              action={updateLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={initialValues}
+              submitLabel="Save"
+              entityId={id}
+            />
+          ) : adapter.editor === 'document' ? (
+            <DocumentForm
               action={updateLibraryItem}
               initialState={initialLibraryFormState()}
               initialValues={initialValues}

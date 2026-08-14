@@ -73,10 +73,11 @@ export interface EntityAdapter {
   /**
    * Optional specialized editor kind. When `'character'`, the new/edit pages
    * render the Phase 18 `CharacterForm`; when `'item'`, the Phase 19
-   * `ItemForm` — instead of the generic `EntityForm` (same server actions and
-   * validation; presentation only).
+   * `ItemForm`; when `'document'`, the Phase 20 `DocumentForm` — instead of
+   * the generic `EntityForm` (same server actions and validation;
+   * presentation only).
    */
-  editor?: 'character' | 'item';
+  editor?: 'character' | 'item' | 'document';
 }
 
 const ADAPTERS: Record<LibraryEntityKey, EntityAdapter> = {
@@ -155,6 +156,7 @@ const ADAPTERS: Record<LibraryEntityKey, EntityAdapter> = {
     enumOptions: {},
     listColumns: [{ column: 'type', label: 'Type' }],
     draftSchema: documentDraftSchema,
+    editor: 'document',
   },
   evidence: {
     key: 'evidence',
