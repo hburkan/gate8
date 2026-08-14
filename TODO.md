@@ -753,23 +753,24 @@ Show:
 
 Item editor:
 
-- [ ] Name.
-- [ ] Category.
-- [ ] Description.
-- [ ] Value.
-- [ ] Risk level.
-- [ ] Rarity.
-- [ ] Image.
-- [ ] Tags.
-- [ ] Allowed locations.
-- [ ] Character pools.
-- [ ] Case pools.
+- [x] Name.
+- [x] Category.
+- [x] Description.
+- [x] Value.
+- [x] Risk level.
+- [x] Rarity.
+- [x] Image. _(path/URL text field; upload/storage deferred — no storage bucket exists)_
+- [ ] Tags. _(deferred — no backing store; no tags column/table in schema)_
+- [ ] Allowed locations. _(write side deferred — location_items is location-centric; Phase 22 Location Management owns writes)_
+- [ ] Character pools. _(deferred — no character_items/character_item_pool table; TODO §7.1 remains deferred)_
+- [ ] Case pools. _(write side deferred — case_items is the case item pool; Phase 23 Case Builder owns writes)_
 
 Show:
 
     Used in Locations
     Used by Characters
     Used in Cases
+    (read-only; locations/cases derived from location_items/case_items — migration 0021 grants service_role SELECT; "Used by Characters" has no backing store)
 
 ---
 
