@@ -63,3 +63,34 @@ export type DocumentRole = (typeof DOCUMENT_ROLES)[number];
  */
 export const INSTANCE_STATUSES = ['generated', 'active', 'completed', 'abandoned'] as const;
 export type InstanceStatus = (typeof INSTANCE_STATUSES)[number];
+
+/**
+ * Admin roles (Phase 15, TODO Phase 15). The role claim lives ONLY in
+ * `app_metadata.role` on the Supabase Auth user (decision D2) — never in
+ * `user_metadata`, never on the client. Values are the JWT claim strings.
+ */
+export const ADMIN_ROLES = ['SUPER_ADMIN', 'CONTENT_ADMIN', 'EDITOR', 'REVIEWER'] as const;
+export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+/** Admin permissions (TODO Phase 15). The claim carries only the role; these are derived. */
+export const ADMIN_PERMISSIONS = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'publish',
+  'rollback',
+] as const;
+export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
+
+/** Role → permission matrix (design §5, decision D5). Contract for Phase 16+ UI gating and Phase 40 RLS. */
+export const ROLE_PERMISSIONS: Record<AdminRole, readonly AdminPermission[]> = {
+  SUPER_ADMIN: ['view', 'create', 'edit', 'delete', 'publish', 'rollback'],
+  CONTENT_ADMIN: ['view', 'create', 'edit', 'delete', 'publish'],
+  EDITOR: ['view', 'create', 'edit'],
+  REVIEWER: ['view'],
+};
+
+export function roleHasPermission(role: AdminRole, permission: AdminPermission): boolean {
+  return ROLE_PERMISSIONS[role].includes(permission);
+}
