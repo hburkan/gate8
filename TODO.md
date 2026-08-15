@@ -832,14 +832,14 @@ Location hierarchy:
 
 Implement:
 
-- [ ] Parent/child locations.
-- [ ] Location types.
-- [ ] Assets.
-- [ ] Available characters.
-- [ ] Available items.
-- [ ] Available documents.
-- [ ] Available evidence.
-- [ ] Available cases.
+- [x] Parent/child locations.
+- [x] Location types.
+- [x] Assets.
+- [x] Available characters.
+- [x] Available items.
+- [x] Available documents.
+- [x] Available evidence.
+- [x] Available cases.
 
 ---
 

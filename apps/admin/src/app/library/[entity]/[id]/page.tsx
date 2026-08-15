@@ -9,13 +9,23 @@ import { getCharacterUsage } from '../../../../lib/library/character-usage';
 import { getItemUsage } from '../../../../lib/library/item-usage';
 import { getDocumentUsage } from '../../../../lib/library/document-usage';
 import { getEvidenceUsage } from '../../../../lib/library/evidence-usage';
+import {
+  getLocationRelations,
+  listEntityOptions,
+} from '../../../../lib/library/location-relations';
+import type {
+  LocationRelations as LocationRelationsData,
+  LocationRelationKind,
+} from '../../../../lib/library/location-relations';
 import { StatusBadge } from '../../../../components/library/StatusBadge';
 import { ConfirmButton } from '../../../../components/library/ConfirmButton';
 import { CharacterUsageList } from '../../../../components/character/CharacterUsageList';
 import { ItemUsageList } from '../../../../components/item/ItemUsageList';
 import { DocumentUsageList } from '../../../../components/document/DocumentUsageList';
 import { EvidenceUsageList } from '../../../../components/evidence/EvidenceUsageList';
+import { LocationRelations } from '../../../../components/location/LocationRelations';
 import { duplicateLibraryItem, archiveLibraryItem } from '../../actions';
+import { addRelation, updateRelation, removeRelation } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { LibraryEntityKey } from '../../../../lib/library/types';
 import type { Metadata } from 'next';
@@ -114,6 +124,36 @@ export default async function EntityDetailPage({ params }: DetailPageProps) {
     }
   }
 
+  let locationRelations: LocationRelationsData | null = null;
+  let locationOptions: Record<LocationRelationKind, Array<{ id: string; title: string }>> | null =
+    null;
+  if (entity === 'locations') {
+    try {
+      locationRelations = await getLocationRelations(libraryServiceClient(), id);
+      const kinds: LocationRelationKind[] = [
+        'characters',
+        'items',
+        'documents',
+        'evidence',
+        'cases',
+      ];
+      const options: Record<LocationRelationKind, Array<{ id: string; title: string }>> = {
+        characters: [],
+        items: [],
+        documents: [],
+        evidence: [],
+        cases: [],
+      };
+      for (const kind of kinds) {
+        options[kind] = await listEntityOptions(libraryServiceClient(), kind);
+      }
+      locationOptions = options;
+    } catch {
+      locationRelations = null;
+      locationOptions = null;
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-16">
       <main className="mx-auto w-full max-w-4xl">
@@ -167,6 +207,17 @@ export default async function EntityDetailPage({ params }: DetailPageProps) {
         ) : null}
         {entity === 'evidence' && evidenceUsage ? (
           <EvidenceUsageList usage={evidenceUsage} />
+        ) : null}
+        {entity === 'locations' && locationRelations && locationOptions ? (
+          <LocationRelations
+            locationId={id}
+            relations={locationRelations}
+            options={locationOptions}
+            canEdit={canEdit}
+            addRelation={addRelation}
+            updateRelation={updateRelation}
+            removeRelation={removeRelation}
+          />
         ) : null}
 
         {canCreate || canDelete ? (

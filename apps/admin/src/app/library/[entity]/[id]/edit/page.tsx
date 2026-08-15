@@ -5,12 +5,14 @@ import { roleFromUser } from '../../../../../lib/auth/roles';
 import { roleHasPermission } from '@gate8/shared-types';
 import { isLibraryEntityKey, getAdapter } from '../../../../../lib/library/registry';
 import { getEntity } from '../../../../../lib/library/query';
+import { listLocationParentOptions } from '../../../../../lib/library/location-relations';
 import { rowToFormValues, initialLibraryFormState } from '../../../../../lib/library/form-state';
 import { EntityForm } from '../../../../../components/library/EntityForm';
 import { CharacterForm } from '../../../../../components/character/CharacterForm';
 import { ItemForm } from '../../../../../components/item/ItemForm';
 import { DocumentForm } from '../../../../../components/document/DocumentForm';
 import { EvidenceForm } from '../../../../../components/evidence/EvidenceForm';
+import { LocationForm } from '../../../../../components/location/LocationForm';
 import { updateLibraryItem } from '../../../actions';
 import type { LibraryEntityKey } from '../../../../../lib/library/types';
 import type { Metadata } from 'next';
@@ -67,6 +69,15 @@ export default async function EditEntityPage({ params }: EditPageProps) {
 
   const initialValues = rowToFormValues(adapter, row);
 
+  let parentOptions: Array<{ id: string; name: string }> = [];
+  if (entity === 'locations') {
+    try {
+      parentOptions = await listLocationParentOptions(libraryServiceClient(), id);
+    } catch {
+      parentOptions = [];
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-16">
       <main className="mx-auto w-full max-w-2xl">
@@ -109,6 +120,15 @@ export default async function EditEntityPage({ params }: EditPageProps) {
               initialValues={initialValues}
               submitLabel="Save"
               entityId={id}
+            />
+          ) : adapter.editor === 'location' ? (
+            <LocationForm
+              action={updateLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={initialValues}
+              submitLabel="Save"
+              entityId={id}
+              parentOptions={parentOptions}
             />
           ) : (
             <EntityForm

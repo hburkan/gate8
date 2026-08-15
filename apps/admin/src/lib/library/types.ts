@@ -101,6 +101,7 @@ export interface LibraryClient {
     select(columns: string, options?: { count?: 'exact' }): LibraryQueryBuilder;
     insert(row: Record<string, unknown>): LibraryQueryBuilder;
     update(row: Record<string, unknown>): LibraryQueryBuilder;
+    delete(): LibraryQueryBuilder;
   };
 }
 

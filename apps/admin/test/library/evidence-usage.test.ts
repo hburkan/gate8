@@ -79,6 +79,10 @@ function fakeClient(stubs: Stub[]): { client: LibraryClient; log: unknown[] } {
           log.push({ op: 'update', table, row });
           return builder(table);
         },
+        delete() {
+          log.push({ op: 'delete', table });
+          return builder(table);
+        },
       };
     },
   };

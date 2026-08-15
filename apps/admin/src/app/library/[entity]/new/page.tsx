@@ -1,13 +1,16 @@
 import { redirect, notFound } from 'next/navigation';
 import { createClient } from '../../../../lib/supabase/server';
+import { libraryServiceClient } from '../../../../lib/library/client';
 import { roleFromUser } from '../../../../lib/auth/roles';
 import { roleHasPermission } from '@gate8/shared-types';
 import { isLibraryEntityKey, getAdapter } from '../../../../lib/library/registry';
+import { listLocationParentOptions } from '../../../../lib/library/location-relations';
 import { EntityForm } from '../../../../components/library/EntityForm';
 import { CharacterForm } from '../../../../components/character/CharacterForm';
 import { ItemForm } from '../../../../components/item/ItemForm';
 import { DocumentForm } from '../../../../components/document/DocumentForm';
 import { EvidenceForm } from '../../../../components/evidence/EvidenceForm';
+import { LocationForm } from '../../../../components/location/LocationForm';
 import { createLibraryItem } from '../../actions';
 import { initialLibraryFormState } from '../../../../lib/library/form-state';
 import type { Metadata } from 'next';
@@ -52,6 +55,15 @@ export default async function NewEntityPage({ params }: NewPageProps) {
 
   const adapter = getAdapter(entity);
 
+  let parentOptions: Array<{ id: string; name: string }> = [];
+  if (entity === 'locations') {
+    try {
+      parentOptions = await listLocationParentOptions(libraryServiceClient(), null);
+    } catch {
+      parentOptions = [];
+    }
+  }
+
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-16">
       <main className="mx-auto w-full max-w-2xl">
@@ -88,6 +100,14 @@ export default async function NewEntityPage({ params }: NewPageProps) {
               initialState={initialLibraryFormState()}
               initialValues={{}}
               submitLabel="Create"
+            />
+          ) : adapter.editor === 'location' ? (
+            <LocationForm
+              action={createLibraryItem}
+              initialState={initialLibraryFormState()}
+              initialValues={{}}
+              submitLabel="Create"
+              parentOptions={parentOptions}
             />
           ) : (
             <EntityForm
